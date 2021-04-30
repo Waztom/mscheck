@@ -1,0 +1,7 @@
+__pycache__/
+.egg
+dist/
+.cfg
+.vscode/
+*.mzML
+*.pdf
