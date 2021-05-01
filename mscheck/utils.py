@@ -45,3 +45,17 @@ def get_molecule_image(mol):
     image = Image.open(figfile)
     image = image.resize((500, 500))
     return image
+
+
+from rdkit.Chem.Draw import IPythonConsole
+from IPython.display import SVG
+from rdkit.Chem.Draw import rdMolDraw2D
+
+
+def test_svg(mol):
+    compound_image = rdMolDraw2D.MolDraw2DSVG(350, 300)
+    image.DrawMolecule(mol)
+    image.FinishDrawing()
+    image = image.GetDrawingText()
+    with open("tmp/output.svg", "w") as f:
+        f.write(image)
