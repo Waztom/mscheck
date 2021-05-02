@@ -1,14 +1,11 @@
 #%%
 """Analyse spectrum class """
+from __future__ import annotations
 from scipy.signal import find_peaks, peak_widths
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.offsetbox import TextArea, AnnotationBbox
-import matplotlib.pylab as pylab
-from svgutils.compose import *
-from rdkit.Chem.Draw import rdMolDraw2D
 
-from utils import get_smiles, get_mol, get_MW, get_molecule_image, test_svg
+from utils import get_smiles, get_mol, get_MW, path_leaf
+from report import create_plot_report
 from spectrum import MassSpectrum
 
 
@@ -155,6 +152,7 @@ class AnalyseSpectrum(MassSpectrum):
         ions_matched = []
         RT_matched = []
         TIC_matched = []
+        mz_patterns = []
 
         ions_to_add_mols = [get_mol(ion) for ion in ionstoadd]
         ions_to_add_MW = [get_MW(mol) for mol in ions_to_add_mols]
@@ -174,8 +172,10 @@ class AnalyseSpectrum(MassSpectrum):
                     ions_matched.append((get_smiles(ion_to_add_mol), result[0]))
                     RT_matched.append(self.MSpeakdata["RT"][result[1]])
                     TIC_matched.append(self.MSpeakdata["TIC"][result[1]])
-
-        mz_patterns = self.get_mz_patterns(RT_matched=RT_matched)
+                    mz_patterns.append(
+                        self.get_mz_patterns(RT_matched=self.MSpeakdata["RT"][result[1]])
+                    )
+        # mz_patterns = self.get_mz_patterns(RT_matched=RT_matched)
 
         self.match_data = {
             "ions_matched": ions_matched,
@@ -195,133 +195,37 @@ class AnalyseSpectrum(MassSpectrum):
 
         mz_patterns = []
 
-        for RT_values in RT_matched:
-            for RT in RT_values:
-                result = np.where(self.MSdata["RT"] == RT)
-                original_index = result[0][0]
-                if self._exp[original_index].get_peaks()[1].size:
-                    mz_patterns.append(self._exp[original_index].get_peaks())
-
+        for RT in RT_matched:
+            result = np.where(self.MSdata["RT"] == RT)
+            original_index = result[0][0]
+            if self._exp[original_index].get_peaks()[1].size:
+                mz_patterns.append(self._exp[original_index].get_peaks())
         return mz_patterns
 
-    def get_report_figure(self):
-        params = {
-            "font.weight": "bold",
-            "legend.fontsize": "x-large",
-            "figure.figsize": (8.5, 5.85),
-            "axes.labelsize": "large",
-            "axes.titleweight": "bold",
-            "axes.labelweight": "bold",
-            "axes.titlesize": "x-large",
-            "xtick.labelsize": "large",
-            "ytick.labelsize": "large",
-        }
-        pylab.rcParams.update(params)
-
+    def get_report_figure(self, plot_title: str = None) -> MassCheckReport:
         no_plots = len(self.match_data["ions_matched"])
+        if not plot_title:
+            plot_title = path_leaf(self._filepath)
 
-        if no_plots == 0:
-            fig, ax = plt.subplots()
-            ax.plot(self.MSdata["RT"], self.MSdata["TIC"], color="k", zorder=-1)
-            ax.set_xlabel("Retention time (min)")
-            ax.set_ylabel("Total ion count (TIC)")
-            ax.set_title(self._filepath.split("/")[-1])
-
-            fig.savefig("cover.svg", transparent=True)
-
-            compound_image = rdMolDraw2D.MolDraw2DSVG(824, 556)
-            compound_image.DrawMolecule(self.compound_mol)
-            compound_image.FinishDrawing()
-            compound_image = compound_image.GetDrawingText()
-            # Test write to temp folder
-            with open("output.svg", "w") as f:
-                f.write(compound_image)
-
-            Figure(
-                "31.0cm",
-                "22.0cm",
-                SVG("output.svg").scale(0.012).move(16.5, 1.5),
-                SVG("cover.svg").scale(0.05),
-            ).save("compose.svg")
-
-        else:
-
-            fig, ax = plt.subplots(no_plots + 1)
-
-            ax[0].plot(self.MSdata["RT"], self.MSdata["TIC"], color="k", zorder=-1)
-            ax[0].set_xlabel("Retention time (min)")
-            ax[0].set_ylabel("Total ion count (TIC)")
-            ax[0].set_title(self._filepath.split("/")[-1])
-
-            subplot = 1
-
-            for ion_found, RT_values, TIC_values in zip(
-                self.match_data["ions_matched"],
-                self.match_data["RT_matched"],
-                self.match_data["TIC_matched"],
-            ):
-
-                ax[0].scatter(
-                    RT_values, TIC_values, s=25.0, marker="x", color="r", zorder=1
-                )
-                TIC_max_index = np.argmax(TIC_values)
-
-                mz_mass = self.match_data["mz_patterns"][TIC_max_index][0]
-                mz_intensity = self.match_data["mz_patterns"][TIC_max_index][1]
-
-                ax[subplot].stem(mz_mass, mz_intensity)
-
-                for i, j in zip(mz_mass, mz_intensity):
-                    ax[subplot].annotate(str(i), xy=(i, j))
-
-                xy = (RT_values[TIC_max_index], TIC_values[TIC_max_index])
-
-                offsetbox = TextArea(
-                    "Ion: {} \nM+: {}\nRT: {}".format(
-                        ion_found[0], ion_found[1], np.round(RT_values[TIC_max_index], 2)
-                    )
-                )
-
-                ab = AnnotationBbox(
-                    offsetbox,
-                    xy,
-                    xybox=(20, 50),
-                    xycoords="data",
-                    boxcoords=("offset points"),
-                    box_alignment=(0.3, 0.4),
-                    arrowprops=dict(arrowstyle="->"),
-                )
-                ax[0].add_artist(ab)
-
-                subplot += 1
-
-            fig.savefig("cover.svg", transparent=True)
-
-            compound_image = rdMolDraw2D.MolDraw2DSVG(824, 556)
-            compound_image.DrawMolecule(self.compound_mol)
-            compound_image.FinishDrawing()
-            compound_image = compound_image.GetDrawingText()
-            # Test write to temp folder
-            with open("output.svg", "w") as f:
-                f.write(compound_image)
-
-            Figure(
-                "31.0cm",
-                "22.0cm",
-                SVG("output.svg").scale(0.012).move(16.5, 1.5),
-                SVG("cover.svg").scale(0.05),
-            ).save("compose.svg")
+        create_plot_report(
+            RT_values=self.MSdata["RT"],
+            TIC_values=self.MSdata["TIC"],
+            plot_title=plot_title,
+            no_plots=no_plots,
+            mol=self.compound_mol,
+            match_data=self.match_data,
+        )
 
 
-# analysis_test = AnalyseSpectrum(
-#     "/home/warren/XChem_projects/mscheck/mscheck/1AB-1001.mzML", mode="Positive"
-# )
+analysis_test = AnalyseSpectrum(
+    "/home/warren/XChem_projects/mscheck/mscheck/1AB-1001.mzML", mode="Positive"
+)
 
-# analysis_test.analyse(
-#     compoundsmiles="O=C(c1ccco1)N1CCN(C(=O)N2CCN(c3ccccc3)CC2)CC1",
-#     ionstoadd=["[H]", "[Na]"],
-#     tolerance=1,
-# )
+analysis_test.analyse(
+    compoundsmiles="O=C(c1ccco1)N1CCN(C(=O)N2CCN(c3ccccc3)CC2)CC1",
+    ionstoadd=["[H]", "[Na]"],
+    tolerance=1,
+)
 
 # analysis_test = AnalyseSpectrum(
 #     "/home/warren/XChem_projects/mscheck/mscheck/1FA-0701.mzML", mode="Positive"
@@ -333,15 +237,15 @@ class AnalyseSpectrum(MassSpectrum):
 #     tolerance=1,
 # )
 
-analysis_test = AnalyseSpectrum(
-    "/home/warren/XChem_projects/mscheck/mscheck/1DB-1301.mzML", mode="Positive"
-)
+# analysis_test = AnalyseSpectrum(
+#     "/home/warren/XChem_projects/mscheck/mscheck/1DB-1301.mzML", mode="Positive"
+# )
 
-analysis_test.analyse(
-    compoundsmiles="COCCNC(=O)N1CCN(C(=O)c2ccco2)CC1",
-    ionstoadd=["[H]", "[Na]"],
-    tolerance=1,
-)
+# analysis_test.analyse(
+#     compoundsmiles="COCCNC(=O)N1CCN(C(=O)c2ccco2)CC1",
+#     ionstoadd=["[H]", "[Na]"],
+#     tolerance=1,
+# )
 
 
 analysis_test.get_report_figure()
