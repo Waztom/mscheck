@@ -4,6 +4,7 @@ from rdkit.Chem import Descriptors
 from PIL import Image
 from io import BytesIO
 import matplotlib.pyplot as plt
+import ntpath
 
 
 def get_mol(smiles: str) -> None:
@@ -33,15 +34,11 @@ def get_MW(mol) -> float:
     return round(Chem.Descriptors.MolWt(mol))
 
 
-def get_molecule_image(mol):
+def path_leaf(path):
     """
-    Creates a PIl image of a mol object
-    Args:
-        mol: mol object target compound
+    Linux and Windows compatible path splitter. Returns
+    the final bit at end of path
+        Args: path to split
     """
-    image = Draw.MolToImage(mol)
-    figfile = BytesIO()
-    image.save(figfile, bbox_inches="tight", format="png")
-    image = Image.open(figfile)
-    image = image.resize((500, 500))
-    return image
+    head, tail = ntpath.split(path)
+    return tail or ntpath.basename(head)
