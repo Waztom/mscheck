@@ -1,4 +1,3 @@
-#%%
 """Analyse spectrum class """
 from __future__ import annotations
 from scipy.signal import find_peaks, peak_widths
@@ -233,37 +232,3 @@ class AnalyseSpectrum(MassSpectrum):
             mol=self.compound_mol,
             match_data=self.Matchdata,
         )
-
-
-# analysis_test = AnalyseSpectrum(
-#     "/home/warren/XChem_projects/mscheck/mscheck/1AB-1001.mzML", mode="Positive"
-# )
-
-# analysis_test.analyse(
-#     compoundsmiles="O=C(c1ccco1)N1CCN(C(=O)N2CCN(c3ccccc3)CC2)CC1",
-#     ionstoadd=["[H]", "[Na]"],
-#     tolerance=1,
-# )
-
-# analysis_test = AnalyseSpectrum(
-#     "/home/warren/XChem_projects/mscheck/mscheck/1FA-0701.mzML", mode="Positive"
-# )
-
-# analysis_test.analyse(
-#     compoundsmiles="O=C(c1ccco1)N1CCN(C(=O)N2CCN(CCO)CC2)CC1",
-#     ionstoadd=["[H]", "[Na]"],
-#     tolerance=1,
-# )
-
-analysis_test = AnalyseSpectrum(
-    "/home/warren/XChem_projects/mscheck/mscheck/1DB-1301.mzML", mode="Positive"
-)
-
-analysis_test.analyse(
-    compoundsmiles="COCCNC(=O)N1CCN(C(=O)c2ccco2)CC1",
-    ionstoadd=["[H]", "[Na]"],
-    tolerance=1,
-)
-
-
-analysis_test.get_report_figure()
