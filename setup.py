@@ -16,20 +16,24 @@ __version__ = version_match.group(1)
 if os.path.exists("README.md"):
     long_description = open("README.md").read()
 else:
-    long_description = """Auto LCMS hunter"""
+    long_description = """Auto MS mass checker"""
 
 setup(
     name="MassCheck",
     version=__version__,
     author="Warren Thompson",
     author_email="waztom@gmail.com",
-    py_modules=["MassHunt"],
-    description="Auto LCMS mass hunter",
+    py_modules=["MassCheck"],
+    description="Auto MS mass checker",
     long_description=long_description,
     long_description_content_type="text/markdown",
     license="MIT",
     install_requires=[
-        "requests==2.23.0",
+        "pyopenms==2.6.0",
+        "scipy==1.5.3",
+        "numpy==1.20.1",
+        "matplotlib==3.3.4",
+        "svgutils==0.3.4",
     ],
     packages=find_packages(),
     url="https://github.com/Waztom/mscheck",
