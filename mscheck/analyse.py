@@ -3,8 +3,7 @@
 from __future__ import annotations
 from scipy.signal import find_peaks, peak_widths
 import numpy as np
-
-from utils import get_smiles, get_mol, get_MW, path_leaf
+from utils import get_smiles, get_mol, get_MW, get_path_leaf
 from report import create_plot_report
 from spectrum import MassSpectrum
 
@@ -35,6 +34,7 @@ class AnalyseSpectrum(MassSpectrum):
         MS_peak_RT = []
         MS_peak_TIC = []
         MS_peak_mz_max = []
+        MS_peak_mz_data = []
 
         peak_indices, peak_properties = find_peaks(self.MSdata["TIC"])
         peak_width_results = peak_widths(self.MSdata["TIC"], peak_indices, rel_height=0.5)
@@ -51,17 +51,20 @@ class AnalyseSpectrum(MassSpectrum):
                 MS_peak_TIC.append(
                     [self.MSdata["TIC"][FWHM_index] for FWHM_index in FWHM_indices]
                 )
-                MS_peak_values = [
-                    self._exp[FWHM_index].get_peaks() for FWHM_index in FWHM_indices
+
+                peak_mz_data = [
+                    self.MSdata["mz_data"][FWHM_index] for FWHM_index in FWHM_indices
                 ]
-                MS_peak_mz_max.append(
-                    [self.get_max_mz(value) for value in MS_peak_values]
-                )
+
+                MS_peak_mz_data.append(peak_mz_data)
+
+                MS_peak_mz_max.append([self.get_max_mz(data) for data in peak_mz_data])
 
         return {
             "RT": np.array([item for sublist in MS_peak_RT for item in sublist]),
             "TIC": np.array([item for sublist in MS_peak_TIC for item in sublist]),
-            "mz": np.array([item for sublist in MS_peak_mz_max for item in sublist]),
+            "mz_data": [item for sublist in MS_peak_mz_data for item in sublist],
+            "mz_max": np.array([item for sublist in MS_peak_mz_max for item in sublist]),
         }
 
     def get_FWHM_indices(self, FWHM_height: float, peak_index: int) -> list:
@@ -104,15 +107,16 @@ class AnalyseSpectrum(MassSpectrum):
 
         return sorted(indices)
 
-    def get_max_mz(self, MS_values: list) -> int or None:
+    def get_max_mz(self, mz_data: list) -> int or None:
         """
         finds the maximum mz value from a list
         Args:
-            MS_values (list): list of mz values from fragment pattern
+            mz_data (list): list of two list containing mz
+                            and intensity values from fragment pattern
         """
 
-        mz_values = MS_values[0]
-        intensity_values = MS_values[1]
+        mz_values = mz_data[0]
+        intensity_values = mz_data[1]
         if intensity_values.size:
             mz_max = int(round(mz_values[np.argmax(intensity_values)]))
             return mz_max
@@ -126,11 +130,11 @@ class AnalyseSpectrum(MassSpectrum):
             mass_ion (int): rounded molecular weight of the target
                             compound + ionisation ion
         """
-        match_test = list(self.MSpeakdata["mz"]).count(mass_ion)
+        match_test = list(self.MSpeakdata["mz_max"]).count(mass_ion)
 
         if match_test != 0:
             match_indices = [
-                i for i, x in enumerate(self.MSpeakdata["mz"]) if x == mass_ion
+                i for i, x in enumerate(self.MSpeakdata["mz_max"]) if x == mass_ion
             ]
             return mass_ion, match_indices
         else:
@@ -152,7 +156,8 @@ class AnalyseSpectrum(MassSpectrum):
         ions_matched = []
         RT_matched = []
         TIC_matched = []
-        mz_patterns = []
+        mz_data_matched = []
+        mz_strongest_value = []
 
         ions_to_add_mols = [get_mol(ion) for ion in ionstoadd]
         ions_to_add_MW = [get_MW(mol) for mol in ions_to_add_mols]
@@ -172,60 +177,73 @@ class AnalyseSpectrum(MassSpectrum):
                     ions_matched.append((get_smiles(ion_to_add_mol), result[0]))
                     RT_matched.append(self.MSpeakdata["RT"][result[1]])
                     TIC_matched.append(self.MSpeakdata["TIC"][result[1]])
-                    mz_patterns.append(
-                        self.get_mz_patterns(RT_matched=self.MSpeakdata["RT"][result[1]])
+                    mz_data_matched.append(
+                        [self.MSpeakdata["mz_data"][index] for index in result[1]]
                     )
-        # mz_patterns = self.get_mz_patterns(RT_matched=RT_matched)
+                    mz_strongest_value.append(
+                        self.get_strongest_mz_pattern(
+                            [self.MSpeakdata["mz_data"][index] for index in result[1]]
+                        )
+                    )
 
-        self.match_data = {
-            "ions_matched": ions_matched,
-            "RT_matched": RT_matched,
-            "TIC_matched": TIC_matched,
-            "mz_patterns": mz_patterns,
+        self.Matchdata = {
+            "ions": ions_matched,
+            "RT": RT_matched,
+            "TIC": TIC_matched,
+            "mz_data": mz_data_matched,
+            "mz_strongest": mz_strongest_value,
         }
 
-        return self.match_data
-
-    def get_mz_patterns(self, RT_matched: list) -> list:
+    def get_strongest_mz_pattern(self, mz_values: list) -> largest_mz_pattern:
         """
-        Retrieve mz paterns where matches found based on RT values
-        Args:
-            RT_matched (list): list of RT values matched with ions found
+        Finds largest mz signal from list of mz patterns and returns mz maz,
+        the intensity and index of max value
+            Args:
+                mz_data (list): lists of list with two lists of mz and intensity values
+                                for an ion fragment pattern
         """
+        mz_intensities = [mz_value[1] for mz_value in mz_values]
+        mz_masses = [mz_value[0] for mz_value in mz_values]
 
-        mz_patterns = []
+        for index, intensity_values in enumerate(mz_intensities):
+            if index == 0:
+                max_value = np.amax(intensity_values)
+                max_index = index
+            else:
+                max_value_test = np.amax(intensity_values)
+                if max_value_test > max_value:
+                    max_value = max_value_test
+                    max_index = index
+                else:
+                    pass
+        mz_masses_max = mz_masses[max_index]
+        mz_intensities_max = mz_intensities[max_index]
+        return mz_masses_max, mz_intensities_max, max_index
 
-        for RT in RT_matched:
-            result = np.where(self.MSdata["RT"] == RT)
-            original_index = result[0][0]
-            if self._exp[original_index].get_peaks()[1].size:
-                mz_patterns.append(self._exp[original_index].get_peaks())
-        return mz_patterns
-
-    def get_report_figure(self, plot_title: str = None) -> MassCheckReport:
-        no_plots = len(self.match_data["ions_matched"])
-        if not plot_title:
-            plot_title = path_leaf(self._filepath)
+    def get_report_figure(self, compound_name: str = None) -> MassCheckReport:
+        no_plots = len(self.Matchdata["ions"])
+        if not compound_name:
+            plot_title = get_path_leaf(self._filepath)
 
         create_plot_report(
             RT_values=self.MSdata["RT"],
             TIC_values=self.MSdata["TIC"],
-            plot_title=plot_title,
+            compound_name=plot_title,
             no_plots=no_plots,
             mol=self.compound_mol,
-            match_data=self.match_data,
+            match_data=self.Matchdata,
         )
 
 
-analysis_test = AnalyseSpectrum(
-    "/home/warren/XChem_projects/mscheck/mscheck/1AB-1001.mzML", mode="Positive"
-)
+# analysis_test = AnalyseSpectrum(
+#     "/home/warren/XChem_projects/mscheck/mscheck/1AB-1001.mzML", mode="Positive"
+# )
 
-analysis_test.analyse(
-    compoundsmiles="O=C(c1ccco1)N1CCN(C(=O)N2CCN(c3ccccc3)CC2)CC1",
-    ionstoadd=["[H]", "[Na]"],
-    tolerance=1,
-)
+# analysis_test.analyse(
+#     compoundsmiles="O=C(c1ccco1)N1CCN(C(=O)N2CCN(c3ccccc3)CC2)CC1",
+#     ionstoadd=["[H]", "[Na]"],
+#     tolerance=1,
+# )
 
 # analysis_test = AnalyseSpectrum(
 #     "/home/warren/XChem_projects/mscheck/mscheck/1FA-0701.mzML", mode="Positive"
@@ -237,15 +255,15 @@ analysis_test.analyse(
 #     tolerance=1,
 # )
 
-# analysis_test = AnalyseSpectrum(
-#     "/home/warren/XChem_projects/mscheck/mscheck/1DB-1301.mzML", mode="Positive"
-# )
+analysis_test = AnalyseSpectrum(
+    "/home/warren/XChem_projects/mscheck/mscheck/1DB-1301.mzML", mode="Positive"
+)
 
-# analysis_test.analyse(
-#     compoundsmiles="COCCNC(=O)N1CCN(C(=O)c2ccco2)CC1",
-#     ionstoadd=["[H]", "[Na]"],
-#     tolerance=1,
-# )
+analysis_test.analyse(
+    compoundsmiles="COCCNC(=O)N1CCN(C(=O)c2ccco2)CC1",
+    ionstoadd=["[H]", "[Na]"],
+    tolerance=1,
+)
 
 
 analysis_test.get_report_figure()
