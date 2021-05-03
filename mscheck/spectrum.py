@@ -41,14 +41,12 @@ class MassSpectrum(object):
             MS_data (dict): a dictionary of mass spectrum peaks, peak instensity, total ion count
                             and retention time data for a spectrum
         """
-        mz_peaks_data = [spectrum.get_peaks()[0] for spectrum in self._exp]
-        mz_intensity_data = [spectrum.get_peaks()[1] for spectrum in self._exp]
-        TIC_data = [round(sum(mz_intensity)) for mz_intensity in mz_intensity_data]
+        mz_data = [spectrum.get_peaks() for spectrum in self._exp]
+        TIC_data = [round(sum(data[1])) for data in mz_data]
         RT_data = [spectrum.getRT() for spectrum in self._exp]
 
         MS_data = {
-            "mzpeaks": mz_peaks_data,
-            "mzintensity": mz_intensity_data,
+            "mz_data": mz_data,
             "TIC": np.array(TIC_data),
             "RT": np.array(RT_data) / 60,
         }

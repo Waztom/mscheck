@@ -1,24 +1,33 @@
+"""Genearte report function"""
 from __future__ import annotations
 import matplotlib.pyplot as plt
 from matplotlib.offsetbox import TextArea, AnnotationBbox
 import matplotlib.pylab as pylab
 from svgutils.compose import *
-from rdkit.Chem.Draw import rdMolDraw2D
 import numpy as np
 from pathlib import Path
-from functools import wraps
 import shutil
+
+from utils import create_molecule_svg
 
 params = {
     "font.weight": "bold",
     "legend.fontsize": "x-large",
-    "figure.figsize": (15, 5.85),
+    "figure.figsize": (12, 12),
     "axes.labelsize": "large",
     "axes.titleweight": "bold",
     "axes.labelweight": "bold",
     "axes.titlesize": "x-large",
     "xtick.labelsize": "large",
     "ytick.labelsize": "large",
+    "figure.titleweight": "bold",
+    "figure.subplot.bottom": 0.11,
+    "figure.subplot.hspace": 0.2,
+    "figure.subplot.left": 0.125,
+    "figure.subplot.right": 0.9,
+    "figure.subplot.top": 0.88,
+    "figure.subplot.wspace": 0.2,
+    "figure.constrained_layout.use": True,
 }
 pylab.rcParams.update(params)
 
@@ -33,56 +42,28 @@ def create_report_dir(func):
     return wrapper
 
 
-def create_molecule_svg(mol: rdkitmol):
-    """
-    Creates svg image of rdkit mol and saves to file
-    """
-    compound_image = rdMolDraw2D.MolDraw2DSVG(824, 556)
-    compound_image.DrawMolecule(mol)
-    compound_image.FinishDrawing()
-    compound_image = compound_image.GetDrawingText()
-    with open("../tmpimages/molecule.svg", "w") as f:
-        f.write(compound_image)
-
-
-def get_strongest_mz_pattern(mz_values: list) -> largest_mz_pattern:
-    """
-    Finds largest mz signal from list of mz patterns
-    """
-    mz_intensities = [mz_value[1] for mz_value in mz_values]
-    mz_masses = [mz_value[0] for mz_value in mz_values]
-
-    for index, intensity_values in enumerate(mz_intensities):
-        if index == 0:
-            max_value = np.amax(intensity_values)
-            max_index = index
-        else:
-            max_value_test = np.amax(intensity_values)
-            if max_value_test > max_value:
-                max_value = max_value_test
-                max_index = index
-            else:
-                pass
-    mz_masses_max = mz_masses[max_index]
-    mz_intensities_max = mz_intensities[max_index]
-    return mz_masses_max, mz_intensities_max, max_index
-
-
 @create_report_dir
 def create_plot_report(
     RT_values: list,
     TIC_values: list,
-    plot_title: str,
+    compound_name: str,
     no_plots: int,
     mol: rdkitmol,
     match_data: dict = None,
 ) -> plot:
+    """
+    Creates report
+    """
+
     if no_plots == 0:
         fig, ax = plt.subplots()
+        fig.suptitle(
+            "MSCheck report: Mass not found for {}".format(compound_name), size=16
+        )
+
         ax.plot(RT_values, TIC_values, color="k", zorder=-1)
         ax.set_xlabel("Retention time (min)")
         ax.set_ylabel("Total ion count (TIC)")
-        ax.set_title(plot_title)
         fig.savefig("../tmpimages/plot.svg", transparent=True)
 
         create_molecule_svg(mol)
@@ -92,43 +73,61 @@ def create_plot_report(
             "22.0cm",
             SVG("../tmpimages/molecule.svg").scale(0.012).move(16.5, 1.5),
             SVG("../tmpimages/plot.svg").scale(0.05),
-        ).save("../reports/{}report.svg".format(plot_title))
+        ).save("../reports/{}report.svg".format(compound_name))
     else:
         fig, ax = plt.subplots(no_plots + 1)
-        ax[0].plot(RT_values, TIC_values, color="k", zorder=-1)
+
+        fig.suptitle("MSCheck report: Mass found for {}".format(compound_name), size=16)
+
+        fig.align_ylabels()
+
+        ax[0].plot(
+            RT_values,
+            TIC_values,
+            color="k",
+            zorder=-1,
+        )
         ax[0].set_xlabel("Retention time (min)")
         ax[0].set_ylabel("Total ion count (TIC)")
-        ax[0].set_title(plot_title)
+        ax[0].set_xlim([-0.7, ax[0].get_xlim()[1]])
 
         subplot = 1
 
-        for ion_found, RT_values, TIC_values, mz_values in zip(
-            match_data["ions_matched"],
-            match_data["RT_matched"],
-            match_data["TIC_matched"],
-            match_data["mz_patterns"],
+        for ion_found, RT_values, TIC_values, mz_data, mz_strongest in zip(
+            match_data["ions"],
+            match_data["RT"],
+            match_data["TIC"],
+            match_data["mz_data"],
+            match_data["mz_strongest"],
         ):
 
-            ax[0].scatter(RT_values, TIC_values, s=25.0, marker="x", color="r", zorder=1)
-            TIC_max_index = np.argmax(TIC_values)
+            ion_name = ion_found[0].strip("[]")
+            mz_masses_max, mz_intensities_max, max_index = mz_strongest
 
-            mz_masses_max, mz_intensities_max, max_index = get_strongest_mz_pattern(
-                mz_values
+            ax[0].scatter(
+                RT_values,
+                TIC_values,
+                s=45.0,
+                linewidth=3,
+                marker="x",
+                zorder=1,
+                label="{} ion matches".format(ion_name),
             )
+            ax[0].legend(loc="upper right")
 
             ax[subplot].stem(mz_masses_max, mz_intensities_max)
             ax[subplot].set_title(
-                "Stongest mz pattern matching M + {} = {}".format(
-                    ion_found[0], ion_found[1]
-                )
+                "Stongest mz pattern matching M + {} ({})".format(ion_name, ion_found[1])
             )
+            ax[subplot].set_xlabel("m/z (Da)")
+            ax[subplot].set_ylabel("Ion count")
 
             for i, j in zip(mz_masses_max, mz_intensities_max):
-                ax[subplot].annotate(
+                annotation = ax[subplot].annotate(
                     str(i),
                     xy=(i, j),
                     textcoords="offset points",
-                    xytext=(0, 1),
+                    xytext=(3.5, -3.5),
                     ha="left",
                 )
 
@@ -136,7 +135,7 @@ def create_plot_report(
 
             offsetbox = TextArea(
                 "Ion: {} \nM+: {}\nRT: {}".format(
-                    ion_found[0], ion_found[1], np.round(RT_values[TIC_max_index], 2)
+                    ion_found[0], ion_found[1], np.round(RT_values[max_index], 2)
                 )
             )
 
@@ -149,21 +148,21 @@ def create_plot_report(
                 box_alignment=(0.3, 0.4),
                 arrowprops=dict(arrowstyle="->"),
             )
+
             ax[0].add_artist(ab)
 
             subplot += 1
 
-        plt.subplots_adjust(
-            top=2.0, bottom=0.01, left=0.10, right=0.95, hspace=0.3, wspace=0.5
+        fig.savefig(
+            "../tmpimages/plot.svg",
+            transparent=True,
         )
-
-        fig.savefig("../tmpimages/plot.svg", transparent=True)
 
         create_molecule_svg(mol)
 
-        Figure(
-            "100.0cm",
-            "100.0cm",
-            SVG("../tmpimages/molecule.svg").scale(0.012).move(16.5, 1.5),
-            SVG("../tmpimages/plot.svg").scale(0.3),
-        ).save("../reports/{}-report.svg".format(plot_title))
+        test = Figure(
+            "29cm",
+            "40cm",
+            SVG("../tmpimages/molecule.svg").scale(0.011).move(-1, 1.2),
+            SVG("../tmpimages/plot.svg").scale(0.03),
+        ).save("../reports/{}-report.svg".format(compound_name))
