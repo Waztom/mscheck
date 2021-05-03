@@ -19,11 +19,11 @@ else:
     long_description = """Auto MS mass checker"""
 
 setup(
-    name="MassCheck",
+    name="mscheck",
     version=__version__,
     author="Warren Thompson",
     author_email="waztom@gmail.com",
-    py_modules=["MassCheck"],
+    py_modules=["mscheck"],
     description="Auto MS mass checker",
     long_description=long_description,
     long_description_content_type="text/markdown",
