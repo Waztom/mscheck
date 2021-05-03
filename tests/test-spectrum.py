@@ -2,7 +2,7 @@ import unittest
 import sys
 import os
 
-from mscheck import MassSpectrum
+from mscheck.spectrum import MassSpectrum
 
 
 class GetMoleculesDataTest(unittest.TestCase):
