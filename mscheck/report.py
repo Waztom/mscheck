@@ -8,7 +8,7 @@ import numpy as np
 from pathlib import Path
 import shutil
 
-from utils import create_molecule_svg
+from .utils import create_molecule_svg
 
 params = {
     "font.weight": "bold",

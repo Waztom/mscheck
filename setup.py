@@ -34,6 +34,7 @@ setup(
         "numpy==1.20.1",
         "matplotlib==3.3.4",
         "svgutils==0.3.4",
+        "rdkit==2020.09.1.0",
     ],
     packages=find_packages(),
     url="https://github.com/Waztom/mscheck",

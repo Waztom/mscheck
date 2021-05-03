@@ -2,9 +2,9 @@
 from __future__ import annotations
 from scipy.signal import find_peaks, peak_widths
 import numpy as np
-from utils import get_smiles, get_mol, get_MW, get_path_leaf
-from report import create_plot_report
-from spectrum import MassSpectrum
+from .utils import get_smiles, get_mol, get_MW, get_path_leaf
+from .report import create_plot_report
+from .spectrum import MassSpectrum
 
 
 class AnalyseSpectrum(MassSpectrum):
