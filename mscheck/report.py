@@ -57,7 +57,7 @@ def create_report_plot(
     """
 
     if no_plots == 0:
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(12, 4))
         fig.suptitle(
             "MSCheck report: Mass not found for {}".format(compound_name), size=16
         )
@@ -65,16 +65,20 @@ def create_report_plot(
         ax.plot(RT_values, TIC_values, color="k", zorder=-1)
         ax.set_xlabel("Retention time (min)")
         ax.set_ylabel("Total ion count (TIC)")
+        ax.set_xlim([-0.9, ax.get_xlim()[1]])
+        ax.set_ylim([0, ax.get_ylim()[1]])
+
         fig.savefig("../tmpimages/plot.svg", transparent=True)
 
         create_molecule_svg(mol)
 
         Figure(
-            "31.0cm",
-            "22.0cm",
-            SVG("../tmpimages/molecule.svg").scale(0.012).move(16.5, 1.5),
-            SVG("../tmpimages/plot.svg").scale(0.05),
-        ).save("../reports/{}report.svg".format(compound_name))
+            "29cm",
+            "40cm",
+            SVG("../tmpimages/molecule.svg").scale(0.004).move(3, 3),
+            SVG("../tmpimages/plot.svg").scale(0.03),
+        ).save("../reports/{}-report.svg".format(compound_name))
+
     else:
         fig, ax = plt.subplots(no_plots + 1)
 
@@ -171,7 +175,7 @@ def create_report_plot(
 
         create_molecule_svg(mol)
 
-        test = Figure(
+        Figure(
             "29cm",
             "40cm",
             SVG("../tmpimages/molecule.svg").scale(0.004).move(3, 3),
