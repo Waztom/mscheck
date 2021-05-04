@@ -6,3 +6,4 @@ dist/
 *.mzML
 *.pdf
 *.svg
+!report.svg
