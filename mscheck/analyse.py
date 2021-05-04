@@ -1,11 +1,10 @@
-#%%
 """Analyse spectrum class """
 from __future__ import annotations
 from scipy.signal import find_peaks, peak_widths
 import numpy as np
-from utils import get_smiles, get_mol, get_MW, get_path_leaf
-from report import create_report_plot
-from spectrum import MassSpectrum
+from .utils import get_smiles, get_mol, get_MW, get_path_leaf
+from .report import create_report_plot
+from .spectrum import MassSpectrum
 
 
 class AnalyseSpectrum(MassSpectrum):
@@ -233,16 +232,3 @@ class AnalyseSpectrum(MassSpectrum):
             mol=self.compound_mol,
             match_data=self.Matchdata,
         )
-
-
-analysis_test = AnalyseSpectrum(
-    "/home/warren/XChem_projects/mscheck/mscheck/1AB-1001.mzML", mode="Positive"
-)
-
-analysis_test.analyse(
-    compoundsmiles="O=C(c1ccco1)N1CCN(C(=O)N2CCN(c3ccccc3)CC2)CC1",
-    ionstoadd=["[H]", "[Na]"],
-    tolerance=1,
-)
-
-analysis_test.create_report()
