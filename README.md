@@ -54,6 +54,8 @@ test.create_report(compound_name="Test")
 
 Example of report output:<br>
 
-![Example SVG report](/images/report.svg)
+<p align="center">
+<img src="images/report.svg" width="600px">
+</p>
 
 The .SVG report will be in a folder called Reports
