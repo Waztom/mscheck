@@ -1,10 +1,11 @@
+#%%
 """Analyse spectrum class """
 from __future__ import annotations
 from scipy.signal import find_peaks, peak_widths
 import numpy as np
-from .utils import get_smiles, get_mol, get_MW, get_path_leaf
-from .report import create_plot_report
-from .spectrum import MassSpectrum
+from utils import get_smiles, get_mol, get_MW, get_path_leaf
+from report import create_report_plot
+from spectrum import MassSpectrum
 
 
 class AnalyseSpectrum(MassSpectrum):
@@ -219,12 +220,12 @@ class AnalyseSpectrum(MassSpectrum):
         mz_intensities_max = mz_intensities[max_index]
         return mz_masses_max, mz_intensities_max, max_index
 
-    def get_report_figure(self, compound_name: str = None) -> MassCheckReport:
+    def create_report(self, compound_name: str = None) -> MassCheckReport:
         no_plots = len(self.Matchdata["ions"])
         if not compound_name:
             plot_title = get_path_leaf(self._filepath)
 
-        create_plot_report(
+        create_report_plot(
             RT_values=self.MSdata["RT"],
             TIC_values=self.MSdata["TIC"],
             compound_name=plot_title,
@@ -232,3 +233,16 @@ class AnalyseSpectrum(MassSpectrum):
             mol=self.compound_mol,
             match_data=self.Matchdata,
         )
+
+
+analysis_test = AnalyseSpectrum(
+    "/home/warren/XChem_projects/mscheck/mscheck/1AB-1001.mzML", mode="Positive"
+)
+
+analysis_test.analyse(
+    compoundsmiles="O=C(c1ccco1)N1CCN(C(=O)N2CCN(c3ccccc3)CC2)CC1",
+    ionstoadd=["[H]", "[Na]"],
+    tolerance=1,
+)
+
+analysis_test.create_report()

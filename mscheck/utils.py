@@ -48,7 +48,6 @@ def create_molecule_svg(mol: rdkitmol):
     """
     compound_image = rdMolDraw2D.MolDraw2DSVG(824, 556)
     compound_image.drawOptions().padding = 0
-    compound_image.drawOptions().rotate = -90
     compound_image.DrawMolecule(mol)
     compound_image.FinishDrawing()
     compound_image = compound_image.GetDrawingText()
