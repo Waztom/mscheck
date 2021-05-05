@@ -2,15 +2,25 @@ import unittest
 import sys
 import os
 
-from mscheck.spectrum import MassSpectrum
+from mscheck import MassSpectrum
 
 
-class GetMoleculesDataTest(unittest.TestCase):
-    def test_create_spectrum(self):
-
+class SpectrumTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
         mzMLFile = os.path.join("tests", "testdata", "1AB-1001.mzML")
-        spectrum = mscheck.MassSpectrum(mzMLfilepath=mzMLFile)
-        self.assertIsNotNone(spectrum)
+        cls.spectrum_positive = MassSpectrum(mzMLfilepath=mzMLFile, mode="Positive")
+        cls.spectrum_negative = MassSpectrum(mzMLfilepath=mzMLFile, mode="Negative")
+
+    def test_create_positive_spectrum(self):
+        self.assertIsNotNone(self.spectrum_positive)
+        self.assertEqual(len(self.spectrum_positive.MSdata), 3)
+        self.assertEqual(sum(self.spectrum_positive.MSdata["TIC"]), 520031)
+
+    def test_create_negative_spectrum(self):
+        self.assertIsNotNone(self.spectrum_negative)
+        self.assertEqual(len(self.spectrum_negative.MSdata), 3)
+        self.assertEqual(sum(self.spectrum_negative.MSdata["TIC"]), 301270)
 
 
 if __name__ == "__main__":

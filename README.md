@@ -4,6 +4,8 @@
 
 [![PyPI version](https://badge.fury.io/py/mscheck.svg)](https://badge.fury.io/py/mscheck)
 
+[![build main](https://github.com/waztom/mscheck/actions/workflows/build-test.yaml/badge.svg)](https://github.com/waztom/mscheck/actions/workflows/build-test.yaml)
+
 MScheck is a python package that hunts for a target compound mass + given ion mass (eg. H+, Na+).
 MScheck was created to assist with the automated mass spectrum analysis of target compounds synthesised using
 a high throughput approach.
