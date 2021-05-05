@@ -34,7 +34,7 @@ jobs:
         run: |
           conda create -c conda-forge -n MScheck rdkit
           conda activate MScheck
-      - name: Install pip depndencies
+      - name: Install pip dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
