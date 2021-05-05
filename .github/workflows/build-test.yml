@@ -32,7 +32,7 @@ jobs:
       - name: Conda create MSCheck
         shell: bash -l {0}
         run: |
-          conda create -y -n MScheck rdkit
+          conda create -c conda-forge -n MScheck rdkit
           conda activate MScheck
       - name: Install pip depndencies
         run: |
