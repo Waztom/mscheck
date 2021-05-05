@@ -12,7 +12,7 @@ a high throughput approach.
 
 MSCheck uses the excellent Python library [pyOpenMS](https://pyopenms.readthedocs.io/en/latest/index.html) for reading and handling .mzML mass spectra files. The spectra are stored and handled as a MassSpectrum class object - see [spectrum.py](https://github.com/Waztom/mscheck/blob/master/mscheck/spectrum.py).
 
-The AnalyseSpectum class - see [analyse.py](https://github.com/Waztom/mscheck/blob/master/mscheck/analyse.py) use's Scipy's signal peak finding algorithms (find_peaks and peak_widths) to find peaks and calculate the full width at half maximum (FWHM) of the peaks found. Mass spectrum data points are analysed in the area of the peak above the FWHM height by searching for the sum of the parent mass of the target molecule and ion. Different ions can be included in the search - see the example below. 
+The AnalyseSpectum class - see [analyse.py](https://github.com/Waztom/mscheck/blob/master/mscheck/analyse.py) - use Scipy's signal peak finding algorithms (find_peaks and peak_widths) to find peaks and calculate the full width at half maximum height (FWHM) of the peaks found. Mass spectrum data points are analysed in the area of the peak above the FWHM height by searching for the sum of the parent mass of the target molecule and ion. Different ions can be included in the search - see the example below. 
 
 # <a name="MScheck installation"></a>**MScheck installation**
 
