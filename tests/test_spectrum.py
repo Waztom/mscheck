@@ -8,7 +8,7 @@ from mscheck import MassSpectrum
 class SpectrumTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        mzMLFile = os.path.join("tests", "testdata", "1AB-1001.mzML")
+        mzMLFile = os.path.join(os.getcwd(), "tests", "testdata", "1AB-1001.mzML")
         cls.spectrum_positive = MassSpectrum(mzMLfilepath=mzMLFile, mode="Positive")
         cls.spectrum_negative = MassSpectrum(mzMLfilepath=mzMLFile, mode="Negative")
 
