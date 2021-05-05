@@ -25,29 +25,19 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install conda
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          auto-update-conda: true
+          python-version: ${{ matrix.python-version }}
+      - name: Conda create MSCheck
+        shell: bash -l {0}
         run: |
-          # Install Miniconda.
-          # This will be installed in /home/runner/miniconda2
-          wget $CONDA_ORIGIN -O miniconda.sh
-          chmod +x miniconda.sh
-          ./miniconda.sh -b
-          export PATH=/home/runner/miniconda2/bin:$PATH
-          # Echo (for reference) the installed conda.
-          # When last observed this was '4.0.5'.
-          conda -V
-          # Update conda (otherwise conda can't be found)
-          conda update conda -y
-          # Set up a conda environment with the right Python version.
           conda create -y -n MScheck rdkit
-          # Move to the environment
-          source activate MScheck
-        - name: Install pip depndencies
-          run: |
-            python -m pip install --upgrade pip
-            pip install -r requirements.txt
-        - name: Test with unittest
-          run: |
-            python -m unittest discover tests/
-
-
+          conda activate MScheck
+      - name: Install pip depndencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Test with unittest
+        run: |
+          python -m unittest discover tests/
