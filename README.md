@@ -47,17 +47,17 @@ test.analyse(compoundsmiles=target_compound,
              ionstoadd=["[H]", "[Na]", "[K]", "[NH4+]"],
              tolerance=1)test.analyse
 
-# Create a SVG report - if you do not give a compound_name
+# Create a .svg report - if you do not give a compound_name
 # the ending leaf of the file name will be used
 test.create_report(compound_name="Test")
 ```
 
  <br>
 
+The .svg report will be in a folder called Reports
+
 Example of report output:<br>
 
 <p align="center">
 <img src="images/report.svg" width="600px">
 </p>
-
-The .SVG report will be in a folder called Reports
