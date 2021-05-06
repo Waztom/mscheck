@@ -222,12 +222,12 @@ class AnalyseSpectrum(MassSpectrum):
     def create_report(self, compound_name: str = None) -> MassCheckReport:
         no_plots = len(self.Matchdata["ions"])
         if not compound_name:
-            plot_title = get_path_leaf(self._filepath)
+            compound_name = get_path_leaf(self._filepath)
 
         create_report_plot(
             RT_values=self.MSdata["RT"],
             TIC_values=self.MSdata["TIC"],
-            compound_name=plot_title,
+            compound_name=compound_name,
             no_plots=no_plots,
             mol=self.compound_mol,
             match_data=self.Matchdata,
