@@ -10,6 +10,10 @@ MScheck is a python package that hunts for a target compound mass + given ion ma
 MScheck was created to assist with the automated mass spectrum analysis of target compounds synthesised using
 a high throughput approach.
 
+MSCheck uses the excellent Python library [pyOpenMS](https://pyopenms.readthedocs.io/en/latest/index.html) for reading and handling .mzML mass spectra files. The spectra are stored and handled as a MassSpectrum class object - see [spectrum.py](https://github.com/Waztom/mscheck/blob/master/mscheck/spectrum.py).
+
+The AnalyseSpectum class - see [analyse.py](https://github.com/Waztom/mscheck/blob/master/mscheck/analyse.py) - use Scipy's signal peak finding algorithms (find_peaks and peak_widths) to find peaks and calculate the full width at half maximum height (FWHM) of the peaks found. Mass spectrum data points are analysed in the area of the peak above the FWHM height by searching for the sum of the parent mass of the target molecule and ion. Different ions can be included in the search - see the example below. 
+
 # <a name="MScheck installation"></a>**MScheck installation**
 
 MScheck relies on rdkit for generating molecule SVG images and for calculating molecular weights<br>
@@ -26,7 +30,7 @@ Installing rdkit using conda works best followed by a pip install of MScheck<br>
 3. Pip install MScheck
    > `pip install mscheck`
 
-# <a name="MScheck use"></a>**MScheck use**
+# <a name="Preparing vendor files"></a>**Preparing vendor files**
 
 MScheck has been tested on using Agilent LCMS files (.D) as the starting file format. One challenge is to convert vendor file formats into
 a format with the binary decoded.
