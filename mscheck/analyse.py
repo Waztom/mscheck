@@ -227,8 +227,8 @@ class AnalyseSpectrum(MassSpectrum):
         create_report_plot(
             RT_values=self.MSdata["RT"],
             TIC_values=self.MSdata["TIC"],
-            compound_name=compound_name,
             no_plots=no_plots,
             mol=self.compound_mol,
             match_data=self.Matchdata,
+            compound_name=compound_name,
         )
