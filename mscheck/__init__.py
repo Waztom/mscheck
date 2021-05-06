@@ -1,6 +1,6 @@
 """mscheck initialization."""
 __name__ = "mscheck"
-__version__ = "v0.1.7-beta"
+__version__ = "v0.1.8-beta"
 
 from .spectrum import MassSpectrum
 from .analyse import AnalyseSpectrum
