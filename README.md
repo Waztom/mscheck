@@ -38,7 +38,7 @@ a format with the binary decoded.
 1. Convert .D Agilent folder to a .d MassHunter format using Agilent's ChemStation to MassHunter Translator (B.04.00)
 2. Convert .d format into .mzML format using [ProteoWizard's](http://proteowizard.sourceforge.net/) MSConvert tool
 3. Finally - we have an file format that we can use!
-4. In your favourite IDE or Jupyter notebook - as basic example of using MSCheck is provided below:<br>
+4. In your favourite IDE or Jupyter notebook - a basic example of using MSCheck is provided below:<br>
 
 ```
 from mscheck.analyse import AnalyseSpectrum
