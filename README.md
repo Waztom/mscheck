@@ -46,10 +46,13 @@ from mscheck.analyse import AnalyseSpectrum
 # Create MS scptrum object and find peaks
 test = AnalyseSpectrum("<path to .mzML file>", mode="Positive")
 
-# Analyse test spectrum
-test.analyse(compoundsmiles=target_compound,
+# Set SMILES of target to search for
+target_SMILES = "CCOC(=O)N1CCN(C(=O)N2CCN(C(=O)c3ccco3)CC2)CC1"
+
+# Analyse test spectrum searching for target SMILES
+test.analyse(compoundsmiles=target_SMILES,
              ionstoadd=["[H]", "[Na]", "[K]", "[NH4+]"],
-             tolerance=1)test.analyse
+             tolerance=1)
 
 # Create a .svg report - if you do not give a compound_name
 # the ending leaf of the file name will be used
