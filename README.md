@@ -38,7 +38,7 @@ a format with the binary decoded.
 1. Convert .D Agilent folder to a .d MassHunter format using Agilent's ChemStation to MassHunter Translator (B.04.00)
 2. Convert .d format into .mzML format using [ProteoWizard's](http://proteowizard.sourceforge.net/) MSConvert tool
 3. Finally - we have an file format that we can use!
-4. In your favourite IDE or Jupyter notebook - as basic example of using MSCheck is provided below:<br>
+4. In your favourite IDE or Jupyter notebook - a basic example of using MSCheck is provided below:<br>
 
 ```
 from mscheck.analyse import AnalyseSpectrum
@@ -46,10 +46,13 @@ from mscheck.analyse import AnalyseSpectrum
 # Create MS scptrum object and find peaks
 test = AnalyseSpectrum("<path to .mzML file>", mode="Positive")
 
-# Analyse test spectrum
-test.analyse(compoundsmiles=target_compound,
+# Set SMILES of target to search for
+target_SMILES = "CCOC(=O)N1CCN(C(=O)N2CCN(C(=O)c3ccco3)CC2)CC1"
+
+# Analyse test spectrum searching for target SMILES
+test.analyse(compoundsmiles=target_SMILES,
              ionstoadd=["[H]", "[Na]", "[K]", "[NH4+]"],
-             tolerance=1)test.analyse
+             tolerance=1)
 
 # Create a .svg report - if you do not give a compound_name
 # the ending leaf of the file name will be used
