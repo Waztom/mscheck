@@ -29,9 +29,10 @@ setup(
     long_description_content_type="text/markdown",
     license="MIT",
     install_requires=[
-        "pyopenms==2.7.0",
-        "scipy==1.9.3",
-        "matplotlib==3.6.1",
+        "pyopenms==2.6.0",
+        "scipy==1.5.3",
+        "numpy==1.20.1",
+        "matplotlib==3.3.4",
         "svgutils==0.3.4",
     ],
     packages=find_packages(),
