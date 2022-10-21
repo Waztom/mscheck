@@ -1,5 +1,6 @@
-rdkit
+rdkit-pypi 
 pyopenms
 scipy
+numpy
 matplotlib
 svgutils 

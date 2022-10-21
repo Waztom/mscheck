@@ -29,9 +29,10 @@ setup(
     long_description_content_type="text/markdown",
     license="MIT",
     install_requires=[
-        "rdkit",
+        "rdkit-pypi",
         "pyopenms",
         "scipy",
+        "numpy",
         "matplotlib",
         "svgutils",
     ],
