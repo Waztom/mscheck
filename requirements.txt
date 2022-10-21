@@ -1,3 +1,4 @@
+rdkit
 pyopenms
 scipy
 matplotlib
