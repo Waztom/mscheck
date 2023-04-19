@@ -52,7 +52,7 @@ def create_report_plot(
     no_plots: int,
     mol: rdkitmol,
     folder: str,
-    match_data: dict = None
+    match_data: dict = None,
 ) -> plot:
     """
     Creates report
@@ -80,7 +80,7 @@ def create_report_plot(
             SVG("../tmpimages/molecule.svg").scale(0.004).move(3, 3),
             SVG("../tmpimages/plot.svg").scale(0.03),
         ).save("../{}/{}-report.svg".format(folder, compound_name))
-        plt.close('all')
+        plt.close("all")
 
     else:
         fig, ax = plt.subplots(no_plots + 1)
@@ -183,5 +183,5 @@ def create_report_plot(
             "40cm",
             SVG("../tmpimages/molecule.svg").scale(0.004).move(3, 3),
             SVG("../tmpimages/plot.svg").scale(0.03),
-        ).save("../{}/{}-report.svg".format(folder,compound_name))
-        plt.close('all')
+        ).save("../{}/{}-report.svg".format(folder, compound_name))
+        plt.close("all")

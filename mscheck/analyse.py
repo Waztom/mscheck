@@ -139,7 +139,13 @@ class AnalyseSpectrum(MassSpectrum):
         else:
             return mass_ion, []
 
-    def analyse(self, compoundsmiles: str, ionstoadd: list, tolerance: int, ionstosub: list = None) -> dict:
+    def analyse(
+        self,
+        compoundsmiles: str,
+        ionstoadd: list,
+        tolerance: int,
+        ionstosub: list = None,
+    ) -> dict:
         """
         Performs analysis of spectrum
         Args:
@@ -147,7 +153,7 @@ class AnalyseSpectrum(MassSpectrum):
             ionstoadd (list): list of ions as neutral SMILES to add to target compound mass for
                               searching mass spectrum eg. ["[H]", "[Na]"]
             ionstosub (list): list of ions as neutral SMILES to remove from a target compound
-                              mass for searching mass spectrum 
+                              mass for searching mass spectrum
                               eg. ["CC(C)=C","O=C=O.CC(C)=C"] for -tBu and -Boc fragmentation
             tolerance (int): tolerance set for finding a match. Eg. tolerance set to 1 will
                              search for target compound with mass in spectrum of:
@@ -171,7 +177,7 @@ class AnalyseSpectrum(MassSpectrum):
         else:
             ions_to_sub_mols = []
             ions_to_sub_MW = []
-        
+
         ions_to_alter_mols = ions_to_add_mols + ions_to_sub_mols
         ions_to_alter_MW = ions_to_add_MW + ions_to_sub_MW
 
@@ -233,13 +239,12 @@ class AnalyseSpectrum(MassSpectrum):
         mz_intensities_max = mz_intensities[max_index]
         return mz_masses_max, mz_intensities_max, max_index
 
-    def create_report(self, compound_name: str = None,
-                      folder:str = None) -> MassCheckReport:
+    def create_report(
+        self, folder: str = "reports", compound_name: str = None
+    ) -> MassCheckReport:
         no_plots = len(self.Matchdata["ions"])
         if not compound_name:
             compound_name = get_path_leaf(self._filepath)
-        if not folder:
-            folder = "reports"
 
         create_report_plot(
             RT_values=self.MSdata["RT"],
@@ -248,5 +253,5 @@ class AnalyseSpectrum(MassSpectrum):
             mol=self.compound_mol,
             match_data=self.Matchdata,
             compound_name=compound_name,
-            folder=folder
+            folder=folder,
         )
