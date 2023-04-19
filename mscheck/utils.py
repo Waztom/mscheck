@@ -1,7 +1,6 @@
 from __future__ import annotations
 from rdkit import Chem
 from rdkit.Chem.Draw import rdMolDraw2D
-from rdkit.Chem import Descriptors
 import ntpath
 
 
