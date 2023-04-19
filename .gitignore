@@ -8,3 +8,4 @@ dist/
 *.svg
 !report.svg
 !tests/testdata/1AB-1001.mzML
+*.egg-info/

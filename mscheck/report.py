@@ -35,7 +35,8 @@ pylab.rcParams.update(params)
 
 def create_report_dir(func):
     def wrapper(*args, **kwargs):
-        Path("../reports").mkdir(parents=True, exist_ok=True)
+        target_folder = kwargs["folder"]
+        Path("../{}".format(target_folder)).mkdir(parents=True, exist_ok=True)
         Path("../tmpimages").mkdir(parents=True, exist_ok=True)
         func(*args, **kwargs)
         shutil.rmtree("../tmpimages")
@@ -50,6 +51,7 @@ def create_report_plot(
     compound_name: str,
     no_plots: int,
     mol: rdkitmol,
+    folder: str,
     match_data: dict = None,
 ) -> plot:
     """
@@ -77,7 +79,8 @@ def create_report_plot(
             "40cm",
             SVG("../tmpimages/molecule.svg").scale(0.004).move(3, 3),
             SVG("../tmpimages/plot.svg").scale(0.03),
-        ).save("../reports/{}-report.svg".format(compound_name))
+        ).save("../{}/{}-report.svg".format(folder, compound_name))
+        plt.close("all")
 
     else:
         fig, ax = plt.subplots(no_plots + 1)
@@ -147,7 +150,7 @@ def create_report_plot(
             plt.setp(baseline, "color", "k")
 
             ax[subplot].set_title(
-                "Stongest mz pattern matching M + {} ({}) at RT: {} (min) ".format(
+                "Stongest mz pattern matching {} ion ({}) at RT: {} (min) ".format(
                     ion_name, ion_found[1], np.round(RT_max, 1)
                 )
             )
@@ -180,4 +183,5 @@ def create_report_plot(
             "40cm",
             SVG("../tmpimages/molecule.svg").scale(0.004).move(3, 3),
             SVG("../tmpimages/plot.svg").scale(0.03),
-        ).save("../reports/{}-report.svg".format(compound_name))
+        ).save("../{}/{}-report.svg".format(folder, compound_name))
+        plt.close("all")

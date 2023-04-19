@@ -139,13 +139,22 @@ class AnalyseSpectrum(MassSpectrum):
         else:
             return mass_ion, []
 
-    def analyse(self, compoundsmiles: str, ionstoadd: list, tolerance: int) -> dict:
+    def analyse(
+        self,
+        compoundsmiles: str,
+        ionstoadd: list,
+        tolerance: int,
+        ionstosub: list = None,
+    ) -> dict:
         """
         Performs analysis of spectrum
         Args:
             compoundsmiles (str): SMILES string for the target compound ebing analysed
             ionstoadd (list): list of ions as neutral SMILES to add to target compound mass for
                               searching mass spectrum eg. ["[H]", "[Na]"]
+            ionstosub (list): list of ions as neutral SMILES to remove from a target compound
+                              mass for searching mass spectrum
+                              eg. ["CC(C)=C","O=C=O.CC(C)=C"] for -tBu and -Boc fragmentation
             tolerance (int): tolerance set for finding a match. Eg. tolerance set to 1 will
                              search for target compound with mass in spectrum of:
                              MW target compound plus/minus 1
@@ -161,7 +170,18 @@ class AnalyseSpectrum(MassSpectrum):
         ions_to_add_mols = [get_mol(ion) for ion in ionstoadd]
         ions_to_add_MW = [get_MW(mol) for mol in ions_to_add_mols]
 
-        for ion_to_add_mol, MW in zip(ions_to_add_mols, ions_to_add_MW):
+        if ionstosub:
+            ions_to_sub_mols = [get_mol(ion) for ion in ionstosub]
+            # Mass +1 to account for resultant +H adduct observed - assuming positive ionisation method
+            ions_to_sub_MW = [1 - get_MW(mol) for mol in ions_to_sub_mols]
+        else:
+            ions_to_sub_mols = []
+            ions_to_sub_MW = []
+
+        ions_to_alter_mols = ions_to_add_mols + ions_to_sub_mols
+        ions_to_alter_MW = ions_to_add_MW + ions_to_sub_MW
+
+        for ion_to_alter_mol, MW in zip(ions_to_alter_mols, ions_to_alter_MW):
             parent_mass = MW + self.compound_MW
             test_ion_masses = [
                 parent_mass - tolerance,
@@ -173,7 +193,7 @@ class AnalyseSpectrum(MassSpectrum):
 
             for result in match_results:
                 if result[1]:
-                    ions_matched.append((get_smiles(ion_to_add_mol), result[0]))
+                    ions_matched.append((get_smiles(ion_to_alter_mol), result[0]))
                     RT_matched.append(self.MSpeakdata["RT"][result[1]])
                     TIC_matched.append(self.MSpeakdata["TIC"][result[1]])
                     mz_data_matched.append(
@@ -219,7 +239,9 @@ class AnalyseSpectrum(MassSpectrum):
         mz_intensities_max = mz_intensities[max_index]
         return mz_masses_max, mz_intensities_max, max_index
 
-    def create_report(self, compound_name: str = None) -> MassCheckReport:
+    def create_report(
+        self, folder: str = "reports", compound_name: str = None
+    ) -> MassCheckReport:
         no_plots = len(self.Matchdata["ions"])
         if not compound_name:
             compound_name = get_path_leaf(self._filepath)
@@ -231,4 +253,5 @@ class AnalyseSpectrum(MassSpectrum):
             mol=self.compound_mol,
             match_data=self.Matchdata,
             compound_name=compound_name,
+            folder=folder,
         )

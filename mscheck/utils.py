@@ -1,7 +1,7 @@
 from __future__ import annotations
 from rdkit import Chem
-from rdkit.Chem.Draw import rdMolDraw2D
 from rdkit.Chem import Descriptors
+from rdkit.Chem.Draw import rdMolDraw2D
 import ntpath
 
 
@@ -29,7 +29,7 @@ def get_MW(mol) -> float:
     Args:
         mol: mol object target compound
     """
-    return round(Chem.Descriptors.MolWt(mol))
+    return round(Descriptors.MolWt(mol))
 
 
 def get_path_leaf(path):

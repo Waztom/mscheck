@@ -1,7 +1,5 @@
 import unittest
-import sys
 import os
-
 from mscheck import AnalyseSpectrum
 from mscheck import utils
 

@@ -35,6 +35,5 @@ jobs:
         run: |
           conda create -c conda-forge -n MScheck rdkit
           conda activate MScheck
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
           python -m unittest discover
