@@ -19,9 +19,9 @@ The AnalyseSpectum class - see [analyse.py](https://github.com/Waztom/mscheck/bl
 MScheck relies on rdkit for generating molecule SVG images and for calculating molecular weights<br>
 Installing rdkit using conda works best followed by a pip install of MScheck<br>
 
-1. Create a conda environment with rdkit
+1. Create a conda environment
 
-   > `conda create -c conda-forge -n MScheck rdkit`
+   > `conda create -c conda-forge -n MScheck`
 
 2. Activate the MScheck conda environment created
 
