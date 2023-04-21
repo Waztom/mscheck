@@ -31,7 +31,7 @@ setup(
     install_requires=[
         "scipy",
         "svgutils",
-        "pyopenms-nighly",
+        "pyopenms-nightly",
     ],
     packages=find_packages(),
     url="https://github.com/Waztom/mscheck",
