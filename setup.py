@@ -29,13 +29,12 @@ setup(
     long_description_content_type="text/markdown",
     license="MIT",
     install_requires=[
+        "pyopenms",
         "rdkit",
         "matplotlib",
         "scipy",
         "svgutils",
-        "pyopenms",
     ],
-    dependency_links=["https://pypi.cs.uni-tuebingen.de/simple/pyopenms/"],
     packages=find_packages(),
     url="https://github.com/Waztom/mscheck",
     classifiers=[

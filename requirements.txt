@@ -1,7 +1,6 @@
+pyopenms
 rdkit
 matplotlib
 scipy
 svgutils 
 
---extra-index-url https://pypi.cs.uni-tuebingen.de/simple/
-pyopenms
