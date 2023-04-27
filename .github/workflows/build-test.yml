@@ -11,12 +11,6 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      max-parallel: 3
-      matrix:
-        python-version:
-          - 3.8
-          - 3.7
     defaults:
       run:
         shell: bash -l {0}
@@ -33,7 +27,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Conda create MSCheck
         run: |
-          conda create -c conda-forge -n MScheck
+          conda create -c conda-forge -n MScheck python=3.11
           conda activate MScheck
-          pip install -r requirements.txt
+          python setup.py install
           python -m unittest discover
