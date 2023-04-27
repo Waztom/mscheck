@@ -30,4 +30,5 @@ jobs:
           conda create -c conda-forge -n MScheck python=3.11
           conda activate MScheck
           python setup.py install
+          pip install --index-url https://pypi.cs.uni-tuebingen.de/simple/ pyopenms
           python -m unittest discover
