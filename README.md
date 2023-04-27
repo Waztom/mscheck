@@ -21,7 +21,7 @@ Installing rdkit using conda works best followed by a pip install of MScheck<br>
 
 1. Create a conda environment
 
-   > `conda create -c conda-forge -n MScheck`
+   > `conda create -c conda-forge -n MScheck python=3.11`
 
 2. Activate the MScheck conda environment created
 
