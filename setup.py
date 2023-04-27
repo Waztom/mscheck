@@ -30,10 +30,12 @@ setup(
     license="MIT",
     install_requires=[
         "rdkit",
+        "matplotlib",
         "scipy",
         "svgutils",
         "pyopenms-nightly",
     ],
+    dependency_links=["https://pypi.cs.uni-tuebingen.de/simple/pyopenms-nightly/"],
     packages=find_packages(),
     url="https://github.com/Waztom/mscheck",
     classifiers=[
