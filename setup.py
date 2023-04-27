@@ -33,7 +33,7 @@ setup(
         "matplotlib",
         "scipy",
         "svgutils",
-        "pyopenms-nightly",
+        "pyopenms",
     ],
     dependency_links=["https://pypi.cs.uni-tuebingen.de/simple/pyopenms-nightly/"],
     packages=find_packages(),

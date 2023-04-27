@@ -4,4 +4,4 @@ scipy
 svgutils 
 
 --extra-index-url https://pypi.cs.uni-tuebingen.de/simple/
-pyopenms_nightly
+pyopenms
