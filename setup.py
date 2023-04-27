@@ -35,7 +35,7 @@ setup(
         "svgutils",
         "pyopenms",
     ],
-    dependency_links=["https://pypi.cs.uni-tuebingen.de/simple/pyopenms-nightly/"],
+    dependency_links=["https://pypi.cs.uni-tuebingen.de/simple/pyopenms/"],
     packages=find_packages(),
     url="https://github.com/Waztom/mscheck",
     classifiers=[
