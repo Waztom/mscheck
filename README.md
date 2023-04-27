@@ -27,7 +27,12 @@ Installing rdkit using conda works best followed by a pip install of MScheck<br>
 
    > `conda activate MScheck`
 
-3. Pip install MScheck
+3. Pip install pyOpenMS
+
+   > `pip install --index-url https://pypi.cs.uni-tuebingen.de/simple/ pyopenms`
+
+4. Pip install MScheck
+
    > `pip install mscheck`
 
 # <a name="Preparing vendor files"></a>**Preparing vendor files**
