@@ -182,7 +182,10 @@ class AnalyseSpectrum(MassSpectrum):
         ions_to_alter_MW = ions_to_add_MW + ions_to_sub_MW
 
         for ion_to_alter_mol, MW in zip(ions_to_alter_mols, ions_to_alter_MW):
-            parent_mass = MW + self.compound_MW
+            if self.mode == "Positive":
+                parent_mass = MW + self.compound_MW
+            elif self.mode == "Negative":
+                parent_mass = self.compound_MW - MW
             test_ion_masses = [
                 parent_mass - tolerance,
                 parent_mass,
