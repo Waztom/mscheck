@@ -16,7 +16,7 @@ class MassSpectrum(object):
                         to Positive.
         """
         self._filepath = mzMLfilepath
-        self._mode = mode
+        self.mode = mode
         self._exp = self._create_openms()
         self.MSdata = self._get_ms_data()
 
@@ -28,9 +28,9 @@ class MassSpectrum(object):
         """
         openms = MSExperiment()
         MzMLFile().load(self._filepath, openms)
-        if self._mode == "Positive":
+        if self.mode == "Positive":
             openms = [spectrum for i, spectrum in enumerate(openms) if i % 2 == 0]
-        if self._mode == "Negative":
+        if self.mode == "Negative":
             openms = [spectrum for i, spectrum in enumerate(openms) if i % 2 != 0]
         return openms
 
