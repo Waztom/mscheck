@@ -9,6 +9,8 @@ jobs:
   build-and-publish:
     name: Build and publish mscheck on PyPI
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@master
       - name: Python setup ${{ matrix.python-version }}
@@ -20,7 +22,3 @@ jobs:
           python setup.py sdist
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          user: Waztom
-          password: ${{ secrets.PYPI_PW}}
-          skip_existing: true
