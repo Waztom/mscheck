@@ -16,7 +16,7 @@ def get_mol(smiles: str) -> None:
 
 def get_smiles(mol) -> str:
     """
-    Creates SMILES string from target compound mol
+    Creates SMILES string from target compound molß
     Args:
         mol: compound mol
     """

@@ -1,10 +1,11 @@
+#%%
 """Analyse spectrum class """
 from __future__ import annotations
 from scipy.signal import find_peaks, peak_widths
 import numpy as np
-from .utils import get_smiles, get_mol, get_MW, get_path_leaf
-from .report import create_report_plot
-from .spectrum import MassSpectrum
+from utils import get_smiles, get_mol, get_MW, get_path_leaf
+from report import create_report_plot
+from spectrum import MassSpectrum
 
 
 class AnalyseSpectrum(MassSpectrum):
@@ -122,9 +123,10 @@ class AnalyseSpectrum(MassSpectrum):
         else:
             return None
 
-    def get_match_indices(self, mass_ion: int) -> list:
+    def get_max_match_indices(self, mass_ion: int) -> list:
         """
-        Finds indices where mass of ions found in mz data
+        Finds data indices where mass of ions matches with maximum signal
+        from  mz pattern data ie a veyr dominant signal
         Args:
             mass_ion (int): rounded molecular weight of the target
                             compound + ionisation ion
@@ -135,10 +137,53 @@ class AnalyseSpectrum(MassSpectrum):
             match_indices = [
                 i for i, x in enumerate(self.MSpeakdata["mz_max"]) if x == mass_ion
             ]
-            return mass_ion, match_indices
+            max_mz_match = True
+            return mass_ion, match_indices, max_mz_match 
         else:
-            return mass_ion, []
-
+            max_mz_match = False
+            return mass_ion, [], max_mz_match
+    
+    
+    def get_any_match_indices(self, mass_ion: int) -> list:
+        """
+        Finds any data indices where mass of ions found in mz data 
+        ie a secondary or less dominant signal in the mz pattern
+        Args:
+            mass_ion (int): rounded molecular weight of the target
+                            compound + ionisation ion
+        """
+     
+        match_indices = []    
+        for i, mz_data in enumerate(self.MSpeakdata["mz_data"]):
+            for mass in mz_data[0]:
+                if round(mass) == mass_ion:
+                    match_indices.append(i)
+        if match_indices:
+            max_mz_match = False
+            return mass_ion, match_indices, max_mz_match
+        else:
+            max_mz_match = False
+            return mass_ion, [], max_mz_match
+    
+    def get_extracted_ion_count(self, RT_data:list, mz_data: list, ion_mass: int) -> list:
+        """
+        Extracts ion data from mz_data list
+        Args:
+            mz_data (list): list of mz data
+            ion_mass (int): Masses ion to extract and match from mz_data
+        Returns:
+            extracted_ion_data (list): list of intensity values matched to ion to extract
+        """  
+        ion_masses = [ion_mass, ion_mass +1, ion_mass -1]
+        EIC_data = []
+        for e, mz in enumerate(mz_data):
+            extracted_ion_signal = 0
+            for i, mass in  enumerate(mz[0]):
+                if round(mass) in ion_masses:
+                    extracted_ion_signal += mz[1][i]
+                EIC_data.append((RT_data[e], extracted_ion_signal))
+        return EIC_data
+    
     def analyse(
         self,
         compoundsmiles: str,
@@ -149,7 +194,7 @@ class AnalyseSpectrum(MassSpectrum):
         """
         Performs analysis of spectrum
         Args:
-            compoundsmiles (str): SMILES string for the target compound ebing analysed
+            compoundsmiles (str): SMILES string for the target compound being analysed
             ionstoadd (list): list of ions as neutral SMILES to add to target compound mass for
                               searching mass spectrum eg. ["[H]", "[Na]"]
             ionstosub (list): list of ions as neutral SMILES to remove from a target compound
@@ -161,6 +206,8 @@ class AnalyseSpectrum(MassSpectrum):
         """
         self.compound_mol = get_mol(compoundsmiles)
         self.compound_MW = get_MW(self.compound_mol)
+        EIC_data = []
+        max_mz_match = []
         ions_matched = []
         RT_matched = []
         TIC_matched = []
@@ -191,24 +238,59 @@ class AnalyseSpectrum(MassSpectrum):
                 parent_mass,
                 parent_mass + tolerance,
             ]
-
-            match_results = [self.get_match_indices(ion) for ion in test_ion_masses]
-
-            for result in match_results:
-                if result[1]:
-                    ions_matched.append((get_smiles(ion_to_alter_mol), result[0]))
-                    RT_matched.append(self.MSpeakdata["RT"][result[1]])
-                    TIC_matched.append(self.MSpeakdata["TIC"][result[1]])
-                    mz_data_matched.append(
-                        [self.MSpeakdata["mz_data"][index] for index in result[1]]
-                    )
-                    mz_strongest_value.append(
-                        self.get_strongest_mz_pattern(
-                            [self.MSpeakdata["mz_data"][index] for index in result[1]]
+            ion_matches = []
+            for ion_mass in test_ion_masses:
+                ion_match_max = self.get_max_match_indices(ion_mass)
+                ion_matches.append(ion_match_max)
+            if not ion_matches:
+                ion_matches = []    
+                ion_match_any = self.get_any_match_indices(ion_mass[1]) #Only search for parent mass
+                ion_matches.append(ion_match_any)
+            if not ion_matches:
+                continue
+            if ion_matches:          
+                for ion_match in ion_matches:
+                    if ion_match[1]:
+                        EIC_data.append(self.get_extracted_ion_count(RT_data=self.MSdata["RT"], mz_data=self.MSdata["mz_data"], ion_mass=ion_match[0]))
+                        max_mz_match.append(ion_match[2])
+                        ions_matched.append((get_smiles(ion_to_alter_mol), ion_match[0]))
+                        RT_matched.append(self.MSpeakdata["RT"][ion_match[1]])
+                        TIC_matched.append(self.MSpeakdata["TIC"][ion_match[1]])
+                        mz_data_matched.append(
+                            [self.MSpeakdata["mz_data"][index] for index in ion_match[1]]
                         )
-                    )
+                        mz_strongest_value.append(
+                            self.get_strongest_mz_pattern(
+                                [self.MSpeakdata["mz_data"][index] for index in ion_match[1]]
+                            )
+                        )
+          
 
-        self.Matchdata = {
+            # match_results = [self.get_match_indices(ion) for ion in test_ion_masses]
+
+            # if not match_results:
+
+
+            # for result in match_results:
+            #     if result[1]:
+            #         EIC_data.append(self.get_extracted_ion_count(RT_data=self.MSdata["RT"], mz_data=self.MSdata["mz_data"], ion_mass=result[0]))
+            #         max_mz_match.append(result[2])
+            #         ions_matched.append((get_smiles(ion_to_alter_mol), result[0]))
+            #         RT_matched.append(self.MSpeakdata["RT"][result[1]])
+            #         TIC_matched.append(self.MSpeakdata["TIC"][result[1]])
+            #         mz_data_matched.append(
+            #             [self.MSpeakdata["mz_data"][index] for index in result[1]]
+            #         )
+            #         mz_strongest_value.append(
+            #             self.get_strongest_mz_pattern(
+            #                 [self.MSpeakdata["mz_data"][index] for index in result[1]]
+            #             )
+            #         )
+        max_EIC_signal = np.amax([EIC[1] for EIC in EIC_data])
+        self.analysedata = {
+            "EIC_data": EIC_data,
+            "max_EIC_signal": max_EIC_signal,
+            "max_mz_match": max_mz_match,
             "ions": ions_matched,
             "RT": RT_matched,
             "TIC": TIC_matched,
@@ -218,7 +300,7 @@ class AnalyseSpectrum(MassSpectrum):
 
     def get_strongest_mz_pattern(self, mz_values: list) -> largest_mz_pattern:
         """
-        Finds largest mz signal from list of mz patterns and returns mz maz,
+        Finds largest mz signal from list of mz patterns and returns mz max value,
         the intensity and index of max value
             Args:
                 mz_data (list): lists of list with two lists of mz and intensity values
@@ -245,16 +327,36 @@ class AnalyseSpectrum(MassSpectrum):
     def create_report(
         self, folder: str = "reports", compound_name: str = None
     ) -> MassCheckReport:
-        no_plots = len(self.Matchdata["ions"])
+        no_plots = len(self.analysedata["ions"])
         if not compound_name:
             compound_name = get_path_leaf(self._filepath)
 
         create_report_plot(
+            msmode=self.mode,
             RT_values=self.MSdata["RT"],
             TIC_values=self.MSdata["TIC"],
             no_plots=no_plots,
             mol=self.compound_mol,
-            match_data=self.Matchdata,
+            analysedata=self.analysedata,
             compound_name=compound_name,
             folder=folder,
         )
+
+
+# Create MS spectrum object and find peaks
+test = AnalyseSpectrum(mzMLfilepath="/Users/bvh64415/mscheck/tests/testdata/1AB-1001.mzML", mode="Positive")
+
+# Set SMILES of target to search for
+target_SMILES = "O=C(c1ccco1)N4CCN(C(=O)N3CCN(c2ccccc2)CC3)CC4"
+
+# Analyse test spectrum searching for target SMILES
+test.analyse(compoundsmiles=target_SMILES,
+             ionstoadd=["[H]", "[Na]"],
+             tolerance=1)
+
+# Create a .svg report - if you do not give a compound_name
+# the ending leaf of the file name will be used
+test.create_report(folder="reports", compound_name="Test")
+
+
+# %%
