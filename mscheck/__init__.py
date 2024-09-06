@@ -1,4 +1,5 @@
 """mscheck initialization."""
+
 __name__ = "mscheck"
 __version__ = "v0.3.1-beta"
 

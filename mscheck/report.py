@@ -1,8 +1,8 @@
 """Genearte report function"""
+
 from __future__ import annotations
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import cm
-from matplotlib.offsetbox import TextArea, AnnotationBbox
 import matplotlib.pylab as pylab
 from svgutils.compose import *
 import numpy as np
@@ -109,7 +109,14 @@ def create_report_plot(
         subplot = 1
 
         colors = iter(cm.rainbow(np.linspace(0, 1, no_plots * 2)))
-        for EIC_data, max_mz_match, ion_found, RT_match_values, TIC_match_values, mz_strongest in zip(
+        for (
+            EIC_data,
+            max_mz_match,
+            ion_found,
+            RT_match_values,
+            TIC_match_values,
+            mz_strongest,
+        ) in zip(
             analysedata["EIC_data"],
             analysedata["max_mz_match"],
             analysedata["ions"],
@@ -125,7 +132,7 @@ def create_report_plot(
             ion_name = ion_found[0].strip("[]")
             mz_masses_max, mz_intensities_max, max_index = mz_strongest
 
-            color_matches = next(colors)              
+            color_matches = next(colors)
 
             ax[0].scatter(
                 [RT for i, RT in enumerate(RT_match_values) if i != max_index],
@@ -135,7 +142,9 @@ def create_report_plot(
                 linewidth=3,
                 marker="x",
                 zorder=1,
-                label="{} mz match for M{}{}".format(max_match_label, ion_mode, ion_name),
+                label="{} mz match for M{}{}".format(
+                    max_match_label, ion_mode, ion_name
+                ),
             )
             ax[0].legend(loc="upper right")
 
@@ -150,7 +159,7 @@ def create_report_plot(
                 linewidth=3,
                 marker="o",
                 zorder=1,
-                label="Strongest mz match pattern for M{}{}".format(ion_mode,ion_name),
+                label="Strongest mz match pattern for M{}{}".format(ion_mode, ion_name),
             )
             ax[0].legend(loc="upper right")
 
@@ -163,11 +172,11 @@ def create_report_plot(
 
             ax[subplot].set_title(
                 "Stongest mz pattern matching M{}{} ({}) at RT: {} (min) ".format(
-                    ion_mode,ion_name, ion_found[1], np.round(RT_max,1)
+                    ion_mode, ion_name, ion_found[1], np.round(RT_max, 1)
                 )
             )
             ax[subplot].set_xlabel("m/z (Da)")
-            ax[subplot].set_ylabel("Relative intensity")   
+            ax[subplot].set_ylabel("Relative intensity")
             ax[subplot].set_xlim(
                 [ax[subplot].get_xlim()[0], ax[subplot].get_xlim()[1] + 10]
             )
@@ -180,14 +189,14 @@ def create_report_plot(
                     xytext=(5.5, -3.5),
                     ha="left",
                 )
-            
+
             subplot += 1
 
-            ax[subplot].set_title("EIC for M{}{}".format(ion_mode,ion_name))
+            ax[subplot].set_title("EIC for M{}{}".format(ion_mode, ion_name))
             ax[subplot].set_xlabel("Retention time (min)")
             ax[subplot].set_ylabel("Extracted ion intensity")
             ax[subplot].set_xlim([-0.9, ax[0].get_xlim()[1]])
-    
+
             ax[subplot].plot(
                 [data[0] for data in EIC_data],
                 [data[1] for data in EIC_data],
