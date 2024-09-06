@@ -3,6 +3,7 @@ from rdkit import Chem
 from rdkit.Chem import Descriptors
 from rdkit.Chem.Draw import rdMolDraw2D
 import ntpath
+import os
 
 
 def get_mol(smiles: str) -> None:
@@ -53,3 +54,46 @@ def create_molecule_svg(mol: rdkitmol):
     compound_image = compound_image.GetDrawingText()
     with open("../tmpimages/molecule.svg", "w") as f:
         f.write(compound_image)
+
+
+def sort_dir_files(data_dir: str) -> list:
+    """
+    Sorts files by their numeric value
+    """
+    filelist = []
+
+    for dir_, _, files in sorted(os.walk(data_dir)):
+        #sorted(files)
+        for file_name in sorted(files):
+            rel_dir = os.path.relpath(dir_, data_dir)
+            rel_file = os.path.join(rel_dir, file_name)
+            if rel_file.endswith(".mzML"):
+                filelist.append(rel_file)
+    sorted_filelist = os_sorted(filelist)
+
+    return sorted_filelist
+
+def bulk_analyse(csv_input_path: str, data_dir: str):
+        """
+        Bulk analyse using a csv file containing target compounds and other metadata
+        Args:
+            csv_input_path (str): path to csv file containing target compounds and metadata
+            data_dir (str): directory containing mzML files
+        """
+
+        target_data = pd.read_csv(csv_input_path)
+        target_data["product-SMILES"] = target_data["product-SMILES"].astype(str)
+        target_data["product-ions-to-add"] = target_data["product-ions-to-add"].astype(str)
+        target_data["product-ions-to-sub"] = target_data["product-ions-to-sub"].astype(str)
+        target_data["product-match-tolerance"] = target_data["product-match-tolerance"].astype(int)
+
+
+
+        for index, row in target_data.iterrows():
+            self.analyse(
+                compoundsmiles=row["SMILES"],
+                ionstoadd=row["Ionstoadd"].split(","),
+                ionstosub=row["Ionstosub"].split(","),
+                tolerance=row["Tolerance"],
+            )
+            self.create_report(folder=data_dir, compound_name=row["CompoundName"])
