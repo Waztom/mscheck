@@ -10,3 +10,9 @@ build/
 !report.svg
 !tests/testdata/1AB-1001.mzML
 *.egg-info/
+*.DS_Store
+*.ipynb_checkpoints
+*.png
+*.jpg
+*.jpeg
+bulk-test/

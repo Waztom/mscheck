@@ -7,7 +7,6 @@ from utils import get_smiles, get_mol, get_MW, get_path_leaf
 from report import create_report_plot
 from spectrum import MassSpectrum
 
-
 class AnalyseSpectrum(MassSpectrum):
     """
     Analyses the MassSpectrum class object
@@ -186,7 +185,7 @@ class AnalyseSpectrum(MassSpectrum):
             for i, mass in enumerate(mz[0]):
                 if round(mass) in ion_masses:
                     extracted_ion_signal += mz[1][i]
-                EIC_data.append((RT_data[e], extracted_ion_signal))
+            EIC_data.append((RT_data[e], extracted_ion_signal))
         return EIC_data
 
     def analyse(
@@ -288,7 +287,7 @@ class AnalyseSpectrum(MassSpectrum):
                         )
 
         if EIC_data:
-            max_EIC_signal = np.max([EIC[1] for EIC in EIC_data])
+            max_EIC_signal = np.max([data[1] for EIC in EIC_data for data in EIC])
         if not EIC_data:
             max_EIC_signal = None
         self.analysedata = {
@@ -328,6 +327,52 @@ class AnalyseSpectrum(MassSpectrum):
         mz_intensities_max = mz_intensities[max_index]
         return mz_masses_max, mz_intensities_max, max_index
 
+    def calculate_eic_area(self) -> float:
+        """
+        Calculate the area under the most dominant extracted ion count curve using the trapezoidal rule
+        
+        Returns:
+            float: Area under the curve of the most dominant EIC signal
+        """
+        eic_data = self.analysedata.get("EIC_data", [])
+        if not eic_data:
+            return 0.0
+            
+        # Find the most dominant EIC curve (the one with the highest peak)
+        max_peak_height = 0
+        dominant_eic_index = 0
+        
+        for i, eic in enumerate(eic_data):
+            if not eic:
+                continue
+                
+            peak_height = max(point[1] for point in eic)
+            if peak_height > max_peak_height:
+                max_peak_height = peak_height
+                dominant_eic_index = i
+        
+        # If we found a dominant curve
+        if max_peak_height > 0 and dominant_eic_index < len(eic_data):
+            dominant_curve = eic_data[dominant_eic_index]
+            
+            # Sort by retention time to ensure correct integration
+            dominant_curve_sorted = sorted(dominant_curve, key=lambda point: point[0])
+            
+            # Calculate area using trapezoidal rule
+            area = 0.0
+            for i in range(1, len(dominant_curve_sorted)):
+                rt_diff = dominant_curve_sorted[i][0] - dominant_curve_sorted[i-1][0]
+                height_avg = (dominant_curve_sorted[i][1] + dominant_curve_sorted[i-1][1]) / 2
+                area += rt_diff * height_avg
+                
+            # Update analysedata with the calculated area
+            self.analysedata["eic_area"] = area
+            
+            return area
+        else:
+            self.analysedata["eic_area"] = 0.0
+            return 0.0
+
     def create_report(
         self, folder: str = "reports", compound_name: str = None
     ) -> MassCheckReport:
@@ -346,33 +391,32 @@ class AnalyseSpectrum(MassSpectrum):
             folder=folder,
         )
 
+# # Create MS spectrum object and find peaks
+# test = AnalyseSpectrum(
+#     mzMLfilepath="/Users/bvh64415/mscheck/tests/testdata/EXP_17.mzML", mode="Positive"
+# )
 
-# Create MS spectrum object and find peaks
-test = AnalyseSpectrum(
-    mzMLfilepath="/Users/bvh64415/mscheck/tests/testdata/EXP_53.mzML", mode="Positive"
-)
+# # Set SMILES of target to search for
+# # target_SMILES = "O=C(c1ccco1)N4CCN(C(=O)N3CCN(c2ccccc2)CC3)CC4"
+# # target_SMILES = "OC(=O)C1=CC=CO1"
+# # target_SMILES = "Nc1ncnc2cc(-c3cccc(S(N)(=O)=O)c3)sc12"
 
-# Set SMILES of target to search for
-# target_SMILES = "O=C(c1ccco1)N4CCN(C(=O)N3CCN(c2ccccc2)CC3)CC4"
-# target_SMILES = "OC(=O)C1=CC=CO1"
-# target_SMILES = "Nc1ncnc2cc(-c3cccc(S(N)(=O)=O)c3)sc12"
-
-# Mathew's test compounds
+# # Mathew's test compounds
 # target_SMILES = "Oc1cc(Br)nc(-c2cccc3cc[nH]c23)c1"
-# target_SMILES =  "Oc1cccnc1-c1cccc2cc[nH]c12"
-target_SMILES = "Cc1nn(C)c(C)c1-c1cc(N)ccn1"
-# target_SMILES =  "Oc1ccc(-c2cccc3cccnc23)nc1"
-# target_SMILES =  "Nc1cccc(-c2cccc3cccnc23)n1"
-# target_SMILES =  "Nc1ccc(-c2cccc3cccnc23)nc1"
-# target_SMILES =  "c1cnc(-c2cccc3cccnc23)nc1"
-# target_SMILES =  "Oc1cccnc1-c1ccccc1"
+# # target_SMILES =  "Oc1cccnc1-c1cccc2cc[nH]c12"
+# # target_SMILES = "Cc1nn(C)c(C)c1-c1cc(N)ccn1"
+# # target_SMILES =  "Oc1ccc(-c2cccc3cccnc23)nc1"
+# # target_SMILES =  "Nc1cccc(-c2cccc3cccnc23)n1"
+# # target_SMILES =  "Nc1ccc(-c2cccc3cccnc23)nc1"
+# # target_SMILES =  "c1cnc(-c2cccc3cccnc23)nc1"
+# # target_SMILES =  "Oc1cccnc1-c1ccccc1"
 
-# Analyse test spectrum searching for target SMILES
-test.analyse(compoundsmiles=target_SMILES, ionstoadd=["[H]", "[Na]"], tolerance=1)
+# # Analyse test spectrum searching for target SMILES
+# test.analyse(compoundsmiles=target_SMILES, ionstoadd=["[H]", "[Na]"], tolerance=1)
 
-# Create a .svg report - if you do not give a compound_name
-# the ending leaf of the file name will be used
-test.create_report(folder="reports")
+# # Create a .svg report - if you do not give a compound_name
+# # the ending leaf of the file name will be used
+# test.create_report(folder="reports")
 
 
 # %%

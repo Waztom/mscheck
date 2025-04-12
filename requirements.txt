@@ -1,5 +1,6 @@
-rdkit
-matplotlib
-scipy
-svgutils 
+rdkit==2020.09.1
+matplotlib==3.3.4
+scipy==1.5.4
+svgutils==0.3.4
+seaborn==0.11.1
 
