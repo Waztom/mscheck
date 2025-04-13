@@ -4,7 +4,7 @@ from __future__ import annotations
 from scipy.signal import find_peaks, peak_widths
 import numpy as np
 from utils import get_smiles, get_mol, get_MW, get_path_leaf
-from report import create_report_plot
+from report import MSReport
 from spectrum import MassSpectrum
 
 class AnalyseSpectrum(MassSpectrum):
@@ -375,20 +375,22 @@ class AnalyseSpectrum(MassSpectrum):
 
     def create_report(
         self, folder: str = "reports", compound_name: str = None
-    ) -> MassCheckReport:
-        no_plots = len(self.analysedata["ions"])
+    ) -> str:
+        """Create a report for the analyzed spectrum"""
         if not compound_name:
             compound_name = get_path_leaf(self._filepath)
-
-        create_report_plot(
+        
+        # Create a report generator instance
+        report_generator = MSReport(output_dir=folder)
+        
+        # Generate the report
+        return report_generator.create_compound_report(
             msmode=self.mode,
             RT_values=self.MSdata["RT"],
             TIC_values=self.MSdata["TIC"],
-            no_plots=no_plots,
-            mol=self.compound_mol,
-            analysedata=self.analysedata,
             compound_name=compound_name,
-            folder=folder,
+            mol=self.compound_mol,
+            analysedata=self.analysedata
         )
 
 # # Create MS spectrum object and find peaks

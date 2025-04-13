@@ -16,3 +16,4 @@ build/
 *.jpg
 *.jpeg
 bulk-test/
+logs/

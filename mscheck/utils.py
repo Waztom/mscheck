@@ -4,6 +4,10 @@ from rdkit.Chem import Descriptors
 from rdkit.Chem.Draw import rdMolDraw2D
 import ntpath
 import os
+from logging_config import get_logger
+
+# Get logger for this module
+logger = get_logger(__name__)
 
 
 def get_mol(smiles: str) -> None:
@@ -43,17 +47,49 @@ def get_path_leaf(path):
     return tail or ntpath.basename(head)
 
 
-def create_molecule_svg(mol: rdkitmol):
+def create_molecule_svg(mol, filepath=None):
     """
     Creates svg image of rdkit mol and saves to file
+    
+    Args:
+        mol: RDKit molecule object
+        filepath: Path where the SVG should be saved (optional)
+    
+    Returns:
+        The SVG content as a string
     """
+    if mol is None:
+        error_msg = "No molecule provided to create_molecule_svg"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+        
+    # Create the SVG
+    logger.debug("Generating molecule SVG")
     compound_image = rdMolDraw2D.MolDraw2DSVG(824, 556)
     compound_image.drawOptions().padding = 0
     compound_image.DrawMolecule(mol)
     compound_image.FinishDrawing()
-    compound_image = compound_image.GetDrawingText()
-    with open("../tmpimages/molecule.svg", "w") as f:
-        f.write(compound_image)
+    svg_content = compound_image.GetDrawingText()
+    
+    # Save to file if filepath is provided
+    if filepath:
+        # Make sure the directory exists
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        
+        with open(filepath, "w") as f:
+            f.write(svg_content)
+        logger.debug(f"Saved molecule SVG to {filepath}")
+    else:
+        # Use the old default path for backward compatibility
+        default_path = "../tmpimages/molecule.svg"
+        os.makedirs(os.path.dirname(default_path), exist_ok=True)
+        
+        with open(default_path, "w") as f:
+            f.write(svg_content)
+        logger.debug(f"Saved molecule SVG to default path {default_path}")
+    
+    # Return the SVG content in case it's needed
+    return svg_content
 
 
 
