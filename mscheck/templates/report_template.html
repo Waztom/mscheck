@@ -36,11 +36,62 @@
             border: 1px solid #ddd;
             border-radius: 5px;
         }
+        /* Navigation styles */
+        .nav-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #f0f8ff;
+            border-radius: 5px;
+        }
+        .nav-button {
+            padding: 8px 16px;
+            background-color: #4a86e8;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        .nav-button:hover {
+            background-color: #2a66c8;
+        }
+        .nav-button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .nav-info {
+            font-size: 14px;
+            color: #555;
+        }
+        .sample-selector {
+            padding: 6px 10px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+            min-width: 200px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>{{REPORT_TITLE}}</h1>
+        
+        <!-- Navigation controls -->
+        <div class="nav-controls">
+            <button id="prev-report" class="nav-button">← Previous</button>
+            
+            <div class="nav-info">
+                <select id="sample-selector" class="sample-selector">
+                    <!-- Options will be populated by JavaScript -->
+                </select>
+            </div>
+            
+            <button id="next-report" class="nav-button">Next →</button>
+        </div>
         
         <div class="instructions">
             <p><strong>Interactive TIC Explorer</strong></p>
@@ -61,8 +112,60 @@
         // Plot data
         const plotData = {{PLOT_JSON}};
         
+        // Navigation data (list of all reports)
+        const availableReports = {{AVAILABLE_REPORTS}};
+        const currentReportIndex = {{CURRENT_REPORT_INDEX}};
+        
         // Initialize the plot
         Plotly.newPlot('main-plot', plotData.data, plotData.layout);
+        
+        // Set up navigation
+        document.addEventListener('DOMContentLoaded', function() {
+            const prevButton = document.getElementById('prev-report');
+            const nextButton = document.getElementById('next-report');
+            const sampleSelector = document.getElementById('sample-selector');
+            
+            // Populate the sample selector
+            availableReports.forEach((report, index) => {
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = report.title;
+                option.selected = index === currentReportIndex;
+                sampleSelector.appendChild(option);
+            });
+            
+            // Update button states
+            updateNavigationButtons();
+            
+            // Add event listeners
+            prevButton.addEventListener('click', navigateToPrevious);
+            nextButton.addEventListener('click', navigateToNext);
+            sampleSelector.addEventListener('change', navigateToSelected);
+            
+            function updateNavigationButtons() {
+                prevButton.disabled = currentReportIndex <= 0;
+                nextButton.disabled = currentReportIndex >= availableReports.length - 1;
+            }
+            
+            function navigateToPrevious() {
+                if (currentReportIndex > 0) {
+                    window.location.href = availableReports[currentReportIndex - 1].path;
+                }
+            }
+
+            function navigateToNext() {
+                if (currentReportIndex < availableReports.length - 1) {
+                    window.location.href = availableReports[currentReportIndex + 1].path;
+                }
+            }
+
+            function navigateToSelected() {
+                const selectedIndex = parseInt(sampleSelector.value);
+                if (selectedIndex !== currentReportIndex) {
+                    window.location.href = availableReports[selectedIndex].path;
+                }
+            }
+        });
     </script>
     
     <!-- Include the external spectrum lookup script -->

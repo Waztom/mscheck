@@ -92,4 +92,46 @@ def create_molecule_svg(mol, filepath=None):
     return svg_content
 
 
+def create_report_directory_structure(base_dir: str) -> dict:
+    """
+    Create a structured directory hierarchy for MS analysis reports
+    
+    Args:
+        base_dir: Base directory path for reports
+        
+    Returns:
+        Dictionary with paths to all report subdirectories
+    """
+    import os
+    
+    # Create the base directory if it doesn't exist
+    os.makedirs(base_dir, exist_ok=True)
+    
+    # Define the directory structure
+    dirs = {
+        "plate_comparisons": os.path.join(base_dir, "plate-comparisons"),
+        "positive": {
+            "root": os.path.join(base_dir, "positive-mode"),
+            "interactive": os.path.join(base_dir, "positive-mode", "interactive-plots"),
+            "static": os.path.join(base_dir, "positive-mode", "static-reports"),
+            "heatmaps": os.path.join(base_dir, "positive-mode", "heatmaps")
+        },
+        "negative": {
+            "root": os.path.join(base_dir, "negative-mode"),
+            "interactive": os.path.join(base_dir, "negative-mode", "interactive-plots"),
+            "static": os.path.join(base_dir, "negative-mode", "static-reports"),
+            "heatmaps": os.path.join(base_dir, "negative-mode", "heatmaps")
+        }
+    }
+    
+    # Create all directories
+    for mode in ["positive", "negative"]:
+        for dir_path in dirs[mode].values():
+            os.makedirs(dir_path, exist_ok=True)
+    
+    os.makedirs(dirs["plate_comparisons"], exist_ok=True)
+    
+    return dirs
+
+
 

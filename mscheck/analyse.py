@@ -1,4 +1,3 @@
-# %%
 """Analyse spectrum class """
 from __future__ import annotations
 from scipy.signal import find_peaks, peak_widths
@@ -392,33 +391,3 @@ class AnalyseSpectrum(MassSpectrum):
             mol=self.compound_mol,
             analysedata=self.analysedata
         )
-
-# # Create MS spectrum object and find peaks
-# test = AnalyseSpectrum(
-#     mzMLfilepath="/Users/bvh64415/mscheck/tests/testdata/EXP_17.mzML", mode="Positive"
-# )
-
-# # Set SMILES of target to search for
-# # target_SMILES = "O=C(c1ccco1)N4CCN(C(=O)N3CCN(c2ccccc2)CC3)CC4"
-# # target_SMILES = "OC(=O)C1=CC=CO1"
-# # target_SMILES = "Nc1ncnc2cc(-c3cccc(S(N)(=O)=O)c3)sc12"
-
-# # Mathew's test compounds
-# target_SMILES = "Oc1cc(Br)nc(-c2cccc3cc[nH]c23)c1"
-# # target_SMILES =  "Oc1cccnc1-c1cccc2cc[nH]c12"
-# # target_SMILES = "Cc1nn(C)c(C)c1-c1cc(N)ccn1"
-# # target_SMILES =  "Oc1ccc(-c2cccc3cccnc23)nc1"
-# # target_SMILES =  "Nc1cccc(-c2cccc3cccnc23)n1"
-# # target_SMILES =  "Nc1ccc(-c2cccc3cccnc23)nc1"
-# # target_SMILES =  "c1cnc(-c2cccc3cccnc23)nc1"
-# # target_SMILES =  "Oc1cccnc1-c1ccccc1"
-
-# # Analyse test spectrum searching for target SMILES
-# test.analyse(compoundsmiles=target_SMILES, ionstoadd=["[H]", "[Na]"], tolerance=1)
-
-# # Create a .svg report - if you do not give a compound_name
-# # the ending leaf of the file name will be used
-# test.create_report(folder="reports")
-
-
-# %%

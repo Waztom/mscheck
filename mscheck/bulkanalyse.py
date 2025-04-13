@@ -1,19 +1,26 @@
 # %%
+from datetime import datetime
 import os
+import logging
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Optional
+from typing import List, Dict, Any, Optional, Tuple
+from rdkit import Chem
+
+# Local imports
 from analyse import AnalyseSpectrum
-from visualisation import MSHeatmapGenerator
 from report import MSReport
-from logging_config import setup_logger
-from datetime import datetime
+from heatmap import MSHeatmapGenerator
+from logging_config import setup_logger, get_logger
 
 # Setup the ROOT logger with a file for this run
 log_file = os.path.join("logs", f"mscheck_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
 logger = setup_logger("mscheck", level="INFO", log_file=log_file, use_colors=True)
 
 logger.info("Starting MSCheck analysis")
+
+# Set up logging
+logger = get_logger(__name__)
 
 class BulkAnalyser:
     """Handles bulk analysis of mass spectrometry data using CSV input"""
@@ -34,7 +41,7 @@ class BulkAnalyser:
         self.processed_samples = 0
         self.total_samples = 0
         self.errors = []
-        self.logger = logger
+        self.logger = logging.getLogger("BulkAnalyser")
         
         self.logger.info(f"Initialized BulkAnalyser with CSV: {csv_input_path}")
         self.logger.info(f"Data directory: {self.data_dir}")
@@ -63,7 +70,7 @@ class BulkAnalyser:
         self, 
         analysis_types: List[str] = ["product", "intermediate", "reactant"], 
         modes: List[str] = ["Positive"], 
-        default_tolerance: int = 1
+        tolerance: int = 1
     ) -> pd.DataFrame:
         """
         Process all samples in the batch
@@ -71,7 +78,7 @@ class BulkAnalyser:
         Args:
             analysis_types: List of analysis types to perform (e.g., product, reactant)
             modes: List of ionization modes to analyze
-            default_tolerance: Default mass tolerance if not specified in CSV
+            tolerance: Default mass tolerance if not specified in CSV
             
         Returns:
             DataFrame with analysis results
@@ -133,7 +140,7 @@ class BulkAnalyser:
                         if tolerance_column in batch_row:
                             analysis_type_match_tolerance = int(batch_row[tolerance_column])
                         else:
-                            analysis_type_match_tolerance = default_tolerance
+                            analysis_type_match_tolerance = tolerance
                             
                         # Process each compound of this type
                         for compound_idx in range(no_compounds):
@@ -349,16 +356,31 @@ class BulkAnalyser:
         # Add any errors to the bulk analyzer's error list
         self.errors.extend(vis.errors)
     
-    def process_samples(self):
-        """Process all samples and generate individual reports"""
+    def process_samples(
+        self,
+        analysis_types: List[str] = ["product", "reactant", "internal-std"],
+        modes: List[str] = ["Positive"],
+        tolerance: int = 1
+    ):
+        """
+        Process all samples and generate individual reports
+        
+        Args:
+            analysis_types: List of compound types to analyze (e.g., product, reactant)
+            modes: List of ionization modes (e.g., Positive, Negative)
+            tolerance: Default mass tolerance in ppm
+            
+        Returns:
+            DataFrame with analysis results
+        """
         if self.batch_data is None:
             self.load_data()
             
-        # Process the samples
+        # Process the samples with the specified parameters
         self.analyse_batch(
-            analysis_types=["product", "reactant", "internal-std"],
-            modes=["Positive"],
-            default_tolerance=1
+            analysis_types=analysis_types,
+            modes=modes,
+            tolerance=tolerance
         )
         
         # Save the results
@@ -471,7 +493,6 @@ class BulkAnalyser:
             
         # Create RDKit molecule
         try:
-            from rdkit import Chem
             mol = Chem.MolFromSmiles(smiles_value)
             if mol is None:
                 self.logger.warning(f"Could not create molecule from SMILES: {smiles_value}")
@@ -576,15 +597,25 @@ class BulkAnalyser:
         report_generator = MSReport(output_dir=os.path.join(self.report_dir, "compound_reports"))
         report_paths = {}
         
+        # First pass - collect information about all reports we'll generate
+        available_reports = []
         for sample_id, sample_data in samples.items():
-            if len(sample_data["compounds"]) == 0:
-                continue
+            if len(sample_data.get("compounds", [])) > 0 and sample_data.get("RT_values") is not None:
+                report_filename = f"Sample_{sample_id}_Analysis.html"
+                report_path = os.path.join(self.report_dir, "compound_reports", f"{sample_id}_analysis.html") 
+                report_title = f"Sample {sample_id} Analysis"
                 
-            # Check for required data
-            if sample_data["RT_values"] is None or sample_data["TIC_values"] is None:
-                self.logger.error(f"Missing RT or TIC values for sample {sample_id}")
-                continue
-                
+                available_reports.append({
+                    "title": report_title,
+                    "path": report_filename,
+                    "sample_id": sample_id
+                })
+        
+        # Second pass - actually generate the reports with navigation
+        for i, report_info in enumerate(available_reports):
+            sample_id = report_info["sample_id"]
+            sample_data = samples[sample_id]
+            
             # Filter valid compounds
             valid_compounds = [c for c in sample_data["compounds"] 
                               if c.get("rt_max") is not None and c.get("mol") is not None]
@@ -600,9 +631,11 @@ class BulkAnalyser:
                 RT_values=sample_data["RT_values"],
                 TIC_values=sample_data["TIC_values"],
                 compounds=valid_compounds,
-                report_title=f"Sample {sample_id} Analysis",
+                report_title=report_info["title"],
                 html_output=True,
-                svg_layout="triple"
+                svg_layout="triple",
+                available_reports=available_reports,
+                current_report_index=i
             )
             
             if report_path:
@@ -613,12 +646,34 @@ class BulkAnalyser:
                 
         return report_paths
     
-    def run_complete_workflow(self):
-        """Run the complete analysis workflow"""
-        self.logger.info("Starting complete analysis workflow...")
+    def run_complete_workflow(
+        self,
+        analysis_types: List[str] = ["product", "reactant", "internal-std"],
+        modes: List[str] = ["Positive"],
+        tolerance: int = 1
+    ):
+        """
+        Run the complete analysis workflow
         
-        # 1. Process all samples
-        self.process_samples()
+        Args:
+            analysis_types: List of compound types to analyze (e.g., product, reactant)
+            modes: List of ionization modes (e.g., Positive, Negative)
+            tolerance: Default mass tolerance
+            
+        Returns:
+            Dictionary mapping sample IDs to their report paths
+        """
+        self.logger.info("Starting complete analysis workflow...")
+        self.logger.info(f"Analysis types: {', '.join(analysis_types)}")
+        self.logger.info(f"Modes: {', '.join(modes)}")
+        self.logger.info(f"Default tolerance: {tolerance}")
+        
+        # 1. Process all samples with the specified parameters
+        self.process_samples(
+            analysis_types=analysis_types,
+            modes=modes,
+            tolerance=tolerance
+        )
         
         # 2. Generate visualizations
         self.generate_visualizations()
@@ -636,11 +691,12 @@ class BulkAnalyser:
 
 
 # Set the paths - replace these with your actual paths "
-csv_path = "/Users/bvh64415/myrepos/mscheck/tests/testdata/bulk-test/bulk-test.csv"
+csv_path = "/Users/bvh64415/myrepos/mscheck/tests/testdata/bulk-test/bulk-test-copy.csv"
 data_dir = "/Users/bvh64415/myrepos/mscheck/tests/testdata/bulk-test/datafiles/"
 report_dir = "/Users/bvh64415/myrepos/mscheck/tests/testdata/bulk-test/reports/"
 
-logger.info("Starting bulk analysis workflow...")
+# Example usage with parameters
+logging.info("Starting bulk analysis workflow...")
 
 # Initialize the analyzer
 analyzer = BulkAnalyser(
@@ -649,9 +705,13 @@ analyzer = BulkAnalyser(
     report_dir=report_dir
 )
 
-# Run the complete workflow
-report_paths = analyzer.run_complete_workflow()
+# Run the complete workflow with custom parameters
+report_paths = analyzer.run_complete_workflow(
+    analysis_types=["product", "reactant", "internal-std", "intermediate"],
+    modes=["Positive", "Negative"],
+    tolerance=1
+)
 
-logger.info("\nAnalysis and visualization complete!")
-logger.info(f"Reports saved to: {report_dir}")
+logging.info("\nAnalysis and visualization complete!")
+logging.info(f"Reports saved to: {report_dir}")
 # %%

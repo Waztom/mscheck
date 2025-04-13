@@ -1,20 +1,23 @@
 """Generate report function"""
 
+# Future imports
 from __future__ import annotations
+
+# Standard library imports
+import os
+import shutil
+from pathlib import Path
+from typing import Dict, List
+
+# Third-party imports
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import cm
-from svgutils.compose import *
 import numpy as np
-from pathlib import Path
-import shutil
-from typing import List, Dict
-import json
-from numpyencoder import NumpyEncoder
-import os
+from svgutils.compose import Figure, SVG
 
-from utils import create_molecule_svg
+# Local imports
 from logging_config import get_logger
-from report_templates import create_interactive_report_html
+from utils import create_molecule_svg
 
 # Get logger for this module
 logger = get_logger(__name__)
@@ -345,28 +348,45 @@ class MSReport:
         compounds: List[Dict],
         report_title: str = "Annotated TIC Report",
         html_output: bool = True,
-        svg_layout: str = "standard"
+        svg_layout: str = "standard",
+        available_reports: List[Dict] = None,
+        current_report_index: int = 0
     ) -> str:
         """
         Create an annotated TIC plot with molecule structures and mass spectra
+        
+        Args:
+            RT_values: Retention time values for the master TIC
+            TIC_values: TIC intensity values
+            compounds: List of dictionaries with compound data
+            report_title: Title for the report
+            html_output: Whether to generate HTML (True) or SVG (False)
+            svg_layout: Layout for SVG output - "standard" or "triple"
+            available_reports: List of all available reports for navigation
+            current_report_index: Index of current report in available_reports
+            
+        Returns:
+            Path to the generated report file
         """
         try:
-            self.logger.info(f"Creating report for {report_title} with {len(compounds)} compounds")
-            self.logger.info(f"Data contains {len(RT_values)} data points")
-            
-            # For HTML output, use interactive implementation
+            # For HTML output
             if html_output:
                 self.logger.info("Creating interactive HTML report")
-                return self._create_interactive_report(RT_values, TIC_values, compounds, report_title)
+                return self._create_interactive_report(
+                    RT_values=RT_values,
+                    TIC_values=TIC_values,
+                    compounds=compounds,
+                    report_title=report_title,
+                    available_reports=available_reports,
+                    current_report_index=current_report_index
+                )
             
-            # For SVG output with triple layout
+            # For SVG output
             elif svg_layout == "triple":
-                self.logger.info("Creating triple-section SVG report")
                 return self._create_triple_section_svg(RT_values, TIC_values, compounds, report_title)
             
             # For standard SVG output
             else:
-                self.logger.info("Creating standard SVG report")
                 return self._create_standard_svg(RT_values, TIC_values, compounds, report_title)
                 
         except Exception as e:
@@ -382,7 +402,9 @@ class MSReport:
         RT_values: list,
         TIC_values: list,
         compounds: List[Dict],
-        report_title: str
+        report_title: str,
+        available_reports: List[Dict] = None,
+        current_report_index: int = 0
     ) -> str:
         """Create interactive HTML report with complete MZ data for all retention times"""
         import plotly.graph_objects as go
@@ -543,16 +565,14 @@ class MSReport:
         html_path = f"{self.output_dir}/{self.sanitize_filename(report_title)}.html"
         
         if mass_spectra:
-            # Create additional script with enhanced functionality
-            # additional_script = create_spectrum_lookup_script()
-            
-            # Create complete HTML
+            # Create complete HTML with navigation
             html_content = create_interactive_report_html(
                 report_title=report_title,
                 plot_figure=fig,
                 mass_spectra=mass_spectra,
                 json_encoder=NumpyEncoder,
-                # additional_script=additional_script
+                available_reports=available_reports,
+                current_report_index=current_report_index
             )
             
             # Write HTML file
