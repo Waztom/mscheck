@@ -1,4 +1,3 @@
-# %%
 from datetime import datetime
 import os
 import logging
@@ -13,14 +12,6 @@ from report import MSReport
 from heatmap import MSHeatmapGenerator
 from logging_config import setup_logger, get_logger
 
-# Setup the ROOT logger with a file for this run
-log_file = os.path.join("logs", f"mscheck_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
-logger = setup_logger("mscheck", level="INFO", log_file=log_file, use_colors=True)
-
-logger.info("Starting MSCheck analysis")
-
-# Set up logging
-logger = get_logger(__name__)
 
 class BulkAnalyser:
     """Handles bulk analysis of mass spectrometry data using CSV input"""
@@ -70,7 +61,8 @@ class BulkAnalyser:
         self, 
         analysis_types: List[str] = ["product", "intermediate", "reactant"], 
         modes: List[str] = ["Positive"], 
-        tolerance: int = 1
+        tolerance: int = 1,
+        calculations : List[str] = ["RRF", "conversion-estimate", ""] # Finish this########################
     ) -> pd.DataFrame:
         """
         Process all samples in the batch
@@ -690,28 +682,49 @@ class BulkAnalyser:
         return report_paths
 
 
+
+# Setup the ROOT logger
+log_file = os.path.join("logs", f"mscheck_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+logger = setup_logger("mscheck", level="INFO", log_file=log_file, use_colors=True)
+logger.info("Starting MSCheck analysis")
+
+# Set up logging
+logger = get_logger(__name__)
+
+bb_data_dir = "/Users/bvh64415/Library/CloudStorage/OneDrive-DiamondLightSourceLtd/FFF-projects/DENV-NS2B3-NS3(MedChemica)/CAR/flavi-t3c-i2a/QC/flavi-t3c-i2a xp00-xp02 with IS/open_source_with_uv/lp00"
+bb_bulk_csv_path = "/Users/bvh64415/Library/CloudStorage/OneDrive-DiamondLightSourceLtd/FFF-projects/DENV-NS2B3-NS3(MedChemica)/CAR/flavi-t3c-i2a/QC/flavi-t3c-i2a xp00-xp02 with IS/open_source_with_uv/mscheck/lp00/bulk-test-lp00.csv"
+bb_report_dir = "/Users/bvh64415/Library/CloudStorage/OneDrive-DiamondLightSourceLtd/FFF-projects/DENV-NS2B3-NS3(MedChemica)/CAR/flavi-t3c-i2a/QC/flavi-t3c-i2a xp00-xp02 with IS/open_source_with_uv/mscheck/lp00/reports"
+
+non_protected_data_dir= "/Users/bvh64415/Library/CloudStorage/OneDrive-DiamondLightSourceLtd/FFF-projects/DENV-NS2B3-NS3(MedChemica)/CAR/flavi-t3c-i2a/QC/flavi-t3c-i2a xp00-xp02 with IS/open_source_with_uv/lp01"
+non_protected_csv_path = "/Users/bvh64415/Library/CloudStorage/OneDrive-DiamondLightSourceLtd/FFF-projects/DENV-NS2B3-NS3(MedChemica)/CAR/flavi-t3c-i2a/QC/flavi-t3c-i2a xp00-xp02 with IS/open_source_with_uv/mscheck/lp01/bulk-test-lp01.csv"
+non_protected_report_dir = "/Users/bvh64415/Library/CloudStorage/OneDrive-DiamondLightSourceLtd/FFF-projects/DENV-NS2B3-NS3(MedChemica)/CAR/flavi-t3c-i2a/QC/flavi-t3c-i2a xp00-xp02 with IS/open_source_with_uv/mscheck/lp01/reports"
+
+protected_data_dir = "/Users/bvh64415/Library/CloudStorage/OneDrive-DiamondLightSourceLtd/FFF-projects/DENV-NS2B3-NS3(MedChemica)/CAR/flavi-t3c-i2a/QC/flavi-t3c-i2a xp00-xp02 with IS/open_source_with_uv/lp02"
+protected_csv_path = "/Users/bvh64415/Library/CloudStorage/OneDrive-DiamondLightSourceLtd/FFF-projects/DENV-NS2B3-NS3(MedChemica)/CAR/flavi-t3c-i2a/QC/flavi-t3c-i2a xp00-xp02 with IS/open_source_with_uv/mscheck/lp02/bulk-test-lp02.csv"
+protected_report_dir = "/Users/bvh64415/Library/CloudStorage/OneDrive-DiamondLightSourceLtd/FFF-projects/DENV-NS2B3-NS3(MedChemica)/CAR/flavi-t3c-i2a/QC/flavi-t3c-i2a xp00-xp02 with IS/open_source_with_uv/mscheck/lp02/reports" 
+
 # Set the paths - replace these with your actual paths "
-csv_path = "/Users/bvh64415/myrepos/mscheck/tests/testdata/bulk-test/bulk-test-copy.csv"
-data_dir = "/Users/bvh64415/myrepos/mscheck/tests/testdata/bulk-test/datafiles/"
-report_dir = "/Users/bvh64415/myrepos/mscheck/tests/testdata/bulk-test/reports/"
+# csv_path = "/Users/bvh64415/myrepos/mscheck/tests/testdata/bulk-test/bulk-test.csv"
+# data_dir = "/Users/bvh64415/myrepos/mscheck/tests/testdata/bulk-test/datafiles/"
+# report_dir = "/Users/bvh64415/myrepos/mscheck/tests/testdata/bulk-test/reports/"
 
 # Example usage with parameters
 logging.info("Starting bulk analysis workflow...")
 
 # Initialize the analyzer
 analyzer = BulkAnalyser(
-    csv_input_path=csv_path,
-    data_dir=data_dir,
-    report_dir=report_dir
+    csv_input_path=bb_bulk_csv_path,
+    data_dir=bb_data_dir,
+    report_dir=bb_report_dir
 )
 
 # Run the complete workflow with custom parameters
 report_paths = analyzer.run_complete_workflow(
-    analysis_types=["product", "reactant", "internal-std", "intermediate"],
+    # analysis_types=["product", "reactant", "internal-std", "intermediate"],
+    analysis_types=["reactant", "internal-std"],
     modes=["Positive", "Negative"],
     tolerance=1
 )
 
 logging.info("\nAnalysis and visualization complete!")
-logging.info(f"Reports saved to: {report_dir}")
-# %%
+logging.info(f"Reports saved to: {bb_report_dir}")

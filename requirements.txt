@@ -1,4 +1,4 @@
-rdkit==2020.09.1
+rdkit==2025.3.2
 matplotlib==3.3.4
 scipy==1.5.4
 svgutils==0.3.4

@@ -44,14 +44,14 @@ def create_interactive_report_html(report_title, plot_figure, mass_spectra,
     # Convert navigation data to JSON
     reports_json = json.dumps(available_reports, cls=json_encoder)
     
-    # Read the HTML template
+    # Read the HTML template - FIX: Add encoding='utf-8'
     template_path = os.path.join(os.path.dirname(__file__), 'templates', 'report_template.html')
-    with open(template_path, 'r') as f:
+    with open(template_path, 'r', encoding='utf-8') as f:
         template_content = f.read()
     
-    # Read the spectrum lookup script
+    # Read the spectrum lookup script - FIX: Add encoding='utf-8'
     script_path = os.path.join(os.path.dirname(__file__), 'templates', 'spectrum_lookup.js')
-    with open(script_path, 'r') as f:
+    with open(script_path, 'r', encoding='utf-8') as f:
         spectrum_script = f.read()
     
     # Replace placeholders
