@@ -1,10 +1,13 @@
-"""Analyse spectrum class """
+"""Analyse spectrum class"""
+
 from __future__ import annotations
 from scipy.signal import find_peaks, peak_widths
 import numpy as np
+import logging
 from utils import get_smiles, get_mol, get_MW, get_path_leaf
 from report import MSReport
 from spectrum import MassSpectrum
+
 
 class AnalyseSpectrum(MassSpectrum):
     """
@@ -20,6 +23,7 @@ class AnalyseSpectrum(MassSpectrum):
         """
         super().__init__(mzMLfilepath, mode)
         self.MSpeakdata = self._get_ms_peak_data()
+        self.logger = logging.getLogger("AnalyseSpectrum")
 
     def _get_ms_peak_data(self) -> dict:
         """
@@ -193,6 +197,7 @@ class AnalyseSpectrum(MassSpectrum):
         ionstoadd: list,
         tolerance: int,
         ionstosub: list = None,
+        custom_mw: float = None,
     ) -> dict:
         """
         Performs analysis of spectrum
@@ -206,9 +211,33 @@ class AnalyseSpectrum(MassSpectrum):
             tolerance (int): tolerance set for finding a match. Eg. tolerance set to 1 will
                              search for target compound with mass in spectrum of:
                              MW target compound plus/minus 1
+            custom_mw (float): Optional custom molecular weight to use for analysis. If provided,
+                               this will override the molecular weight calculated from the SMILES
+                               string.
         """
+        self.logger.info(f"Analyzing compound with SMILES: {compoundsmiles}")
+        self.logger.info(f"Ionization mode: {self.mode}, Tolerance: {tolerance}")
+        self.logger.info(f"Ions to add: {ionstoadd}")
+        if ionstosub:
+            self.logger.info(f"Ions to subtract: {ionstosub}")
+
+        # Parse SMILES to molecule
         self.compound_mol = get_mol(compoundsmiles)
-        self.compound_MW = get_MW(self.compound_mol)
+        if self.compound_mol is None:
+            self.logger.error(f"Failed to parse SMILES: {compoundsmiles}")
+            return {}
+
+        # Use custom molecular weight if provided, otherwise calculate from SMILES
+        if custom_mw is not None:
+            self.compound_MW = custom_mw
+            self.logger.info(f"Using custom molecular weight: {custom_mw:.4f} Da")
+        else:
+            self.compound_MW = get_MW(self.compound_mol)
+            self.logger.info(
+                f"Using calculated molecular weight: {self.compound_MW:.4f} Da"
+            )
+
+        # Initialize data storage
         EIC_data = []
         max_mz_match = []
         ions_matched = []
@@ -217,10 +246,14 @@ class AnalyseSpectrum(MassSpectrum):
         mz_data_matched = []
         mz_strongest_value = []
 
+        # Process ions to add
+        self.logger.info(f"Processing {len(ionstoadd)} ions to add")
         ions_to_add_mols = [get_mol(ion) for ion in ionstoadd]
         ions_to_add_MW = [get_MW(mol) for mol in ions_to_add_mols]
 
+        # Process ions to subtract (if any)
         if ionstosub:
+            self.logger.info(f"Processing {len(ionstosub)} ions to subtract")
             ions_to_sub_mols = [get_mol(ion) for ion in ionstosub]
             # Mass +1 to account for resultant +H adduct observed - assuming positive ionisation method
             ions_to_sub_MW = [1 - get_MW(mol) for mol in ions_to_sub_mols]
@@ -228,35 +261,60 @@ class AnalyseSpectrum(MassSpectrum):
             ions_to_sub_mols = []
             ions_to_sub_MW = []
 
+        # Combine all ion modifications
         ions_to_alter_mols = ions_to_add_mols + ions_to_sub_mols
         ions_to_alter_MW = ions_to_add_MW + ions_to_sub_MW
 
-        for ion_to_alter_mol, MW in zip(ions_to_alter_mols, ions_to_alter_MW):
+        # Process each ion
+        for ion_index, (ion_to_alter_mol, MW) in enumerate(
+            zip(ions_to_alter_mols, ions_to_alter_MW)
+        ):
+            # Calculate expected m/z based on mode
             if self.mode == "Positive":
                 parent_mass = MW + self.compound_MW
+                self.logger.info(
+                    f"Ion {ion_index+1}: Expected m/z (M+ion)+: {parent_mass:.4f}"
+                )
             elif self.mode == "Negative":
                 parent_mass = self.compound_MW - MW
+                self.logger.info(
+                    f"Ion {ion_index+1}: Expected m/z (M-ion)-: {parent_mass:.4f}"
+                )
+
+            # Generate test masses based on tolerance
             test_ion_masses = [
                 parent_mass - tolerance,
                 parent_mass,
                 parent_mass + tolerance,
             ]
+            self.logger.info(
+                f"Testing m/z values: {[round(m) for m in test_ion_masses]}"
+            )
 
+            # Try to find exact matches first
             ion_matches = []
             for ion_mass in test_ion_masses:
                 ion_match_max = self.get_max_match_indices(ion_mass)
                 ion_matches.append(ion_match_max)
+
+            # If no exact matches found, try searching in any position
             if not any([ion_match[1] for ion_match in ion_matches]):
+                self.logger.info("No maximum matches found, searching for any matches")
                 for ion_mass in test_ion_masses:
                     ion_matches = []
-                    ion_any_match = self.get_any_match_indices(
-                        ion_mass
-                    )  # Only search for parent mass
+                    ion_any_match = self.get_any_match_indices(ion_mass)
                     ion_matches.append(ion_any_match)
 
+            # Process matches if found
             if any([ion_max_match[1] for ion_max_match in ion_matches]):
+                self.logger.info(
+                    f"Found matches for compound with m/z ~{round(parent_mass)}"
+                )
                 for ion_match in ion_matches:
                     if ion_match[1]:
+                        self.logger.info(
+                            f"Match at m/z {ion_match[0]}, indices: {ion_match[1]}"
+                        )
                         EIC_data.append(
                             self.get_extracted_ion_count(
                                 RT_data=self.MSdata["RT"],
@@ -284,11 +342,18 @@ class AnalyseSpectrum(MassSpectrum):
                                 ]
                             )
                         )
+            else:
+                self.logger.info(f"No matches found for m/z {round(parent_mass)}")
 
+        # Calculate maximum EIC signal if data exists
         if EIC_data:
             max_EIC_signal = np.max([data[1] for EIC in EIC_data for data in EIC])
-        if not EIC_data:
+            self.logger.info(f"Maximum EIC signal: {max_EIC_signal:.2f}")
+        else:
             max_EIC_signal = None
+            self.logger.warning("No EIC data found for this compound")
+
+        # Store analysis results
         self.analysedata = {
             "EIC_data": EIC_data,
             "max_EIC_signal": max_EIC_signal,
@@ -299,6 +364,15 @@ class AnalyseSpectrum(MassSpectrum):
             "mz_data": mz_data_matched,
             "mz_strongest": mz_strongest_value,
         }
+
+        matched_ions_str = (
+            ", ".join([f"{ion[0]}({ion[1]})" for ion in ions_matched])
+            if ions_matched
+            else "None"
+        )
+        self.logger.info(f"Analysis complete. Matched ions: {matched_ions_str}")
+
+        return self.analysedata
 
     def get_strongest_mz_pattern(self, mz_values: list) -> largest_mz_pattern:
         """
@@ -327,61 +401,64 @@ class AnalyseSpectrum(MassSpectrum):
         return mz_masses_max, mz_intensities_max, max_index
 
     def calculate_eic_area(self) -> float:
-        """
-        Calculate the area under the most dominant extracted ion count curve using the trapezoidal rule
-        
-        Returns:
-            float: Area under the curve of the most dominant EIC signal
-        """
+        """Calculate the area under the most dominant extracted ion count curve using the trapezoidal rule"""
+        self.logger.info("Calculating EIC area")
+
         eic_data = self.analysedata.get("EIC_data", [])
         if not eic_data:
+            self.logger.warning("No EIC data available for area calculation")
             return 0.0
-            
+
         # Find the most dominant EIC curve (the one with the highest peak)
         max_peak_height = 0
         dominant_eic_index = 0
-        
+
         for i, eic in enumerate(eic_data):
             if not eic:
                 continue
-                
+
             peak_height = max(point[1] for point in eic)
             if peak_height > max_peak_height:
                 max_peak_height = peak_height
                 dominant_eic_index = i
-        
+
         # If we found a dominant curve
         if max_peak_height > 0 and dominant_eic_index < len(eic_data):
             dominant_curve = eic_data[dominant_eic_index]
-            
+            self.logger.info(
+                f"Using dominant EIC curve at index {dominant_eic_index} with peak height {max_peak_height:.2f}"
+            )
+
             # Sort by retention time to ensure correct integration
             dominant_curve_sorted = sorted(dominant_curve, key=lambda point: point[0])
-            
+
             # Calculate area using trapezoidal rule
             area = 0.0
             for i in range(1, len(dominant_curve_sorted)):
-                rt_diff = dominant_curve_sorted[i][0] - dominant_curve_sorted[i-1][0]
-                height_avg = (dominant_curve_sorted[i][1] + dominant_curve_sorted[i-1][1]) / 2
+                rt_diff = dominant_curve_sorted[i][0] - dominant_curve_sorted[i - 1][0]
+                height_avg = (
+                    dominant_curve_sorted[i][1] + dominant_curve_sorted[i - 1][1]
+                ) / 2
                 area += rt_diff * height_avg
-                
+
+            self.logger.info(f"Calculated EIC area: {area:.2f}")
             # Update analysedata with the calculated area
-            self.analysedata["eic_area"] = area
-            
+            self.analysedata["EIC_area"] = area
+
             return area
         else:
-            self.analysedata["eic_area"] = 0.0
+            self.logger.warning("No dominant EIC curve found")
+            self.analysedata["EIC_area"] = 0.0
             return 0.0
 
-    def create_report(
-        self, folder: str = "reports", compound_name: str = None
-    ) -> str:
+    def create_report(self, folder: str = "reports", compound_name: str = None) -> str:
         """Create a report for the analyzed spectrum"""
         if not compound_name:
             compound_name = get_path_leaf(self._filepath)
-        
+
         # Create a report generator instance
         report_generator = MSReport(output_dir=folder)
-        
+
         # Generate the report
         return report_generator.create_compound_report(
             msmode=self.mode,
@@ -389,5 +466,5 @@ class AnalyseSpectrum(MassSpectrum):
             TIC_values=self.MSdata["TIC"],
             compound_name=compound_name,
             mol=self.compound_mol,
-            analysedata=self.analysedata
+            analysedata=self.analysedata,
         )

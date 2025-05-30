@@ -50,11 +50,11 @@ def get_path_leaf(path):
 def create_molecule_svg(mol, filepath=None):
     """
     Creates svg image of rdkit mol and saves to file
-    
+
     Args:
         mol: RDKit molecule object
         filepath: Path where the SVG should be saved (optional)
-    
+
     Returns:
         The SVG content as a string
     """
@@ -62,7 +62,7 @@ def create_molecule_svg(mol, filepath=None):
         error_msg = "No molecule provided to create_molecule_svg"
         logger.error(error_msg)
         raise ValueError(error_msg)
-        
+
     # Create the SVG
     logger.debug("Generating molecule SVG")
     compound_image = rdMolDraw2D.MolDraw2DSVG(824, 556)
@@ -70,12 +70,12 @@ def create_molecule_svg(mol, filepath=None):
     compound_image.DrawMolecule(mol)
     compound_image.FinishDrawing()
     svg_content = compound_image.GetDrawingText()
-    
+
     # Save to file if filepath is provided
     if filepath:
         # Make sure the directory exists
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        
+
         with open(filepath, "w") as f:
             f.write(svg_content)
         logger.debug(f"Saved molecule SVG to {filepath}")
@@ -83,11 +83,11 @@ def create_molecule_svg(mol, filepath=None):
         # Use the old default path for backward compatibility
         default_path = "../tmpimages/molecule.svg"
         os.makedirs(os.path.dirname(default_path), exist_ok=True)
-        
+
         with open(default_path, "w") as f:
             f.write(svg_content)
         logger.debug(f"Saved molecule SVG to default path {default_path}")
-    
+
     # Return the SVG content in case it's needed
     return svg_content
 
@@ -95,18 +95,18 @@ def create_molecule_svg(mol, filepath=None):
 def create_report_directory_structure(base_dir: str) -> dict:
     """
     Create a structured directory hierarchy for MS analysis reports
-    
+
     Args:
         base_dir: Base directory path for reports
-        
+
     Returns:
         Dictionary with paths to all report subdirectories
     """
     import os
-    
+
     # Create the base directory if it doesn't exist
     os.makedirs(base_dir, exist_ok=True)
-    
+
     # Define the directory structure
     dirs = {
         "plate_comparisons": os.path.join(base_dir, "plate-comparisons"),
@@ -114,24 +114,21 @@ def create_report_directory_structure(base_dir: str) -> dict:
             "root": os.path.join(base_dir, "positive-mode"),
             "interactive": os.path.join(base_dir, "positive-mode", "interactive-plots"),
             "static": os.path.join(base_dir, "positive-mode", "static-reports"),
-            "heatmaps": os.path.join(base_dir, "positive-mode", "heatmaps")
+            "heatmaps": os.path.join(base_dir, "positive-mode", "heatmaps"),
         },
         "negative": {
             "root": os.path.join(base_dir, "negative-mode"),
             "interactive": os.path.join(base_dir, "negative-mode", "interactive-plots"),
             "static": os.path.join(base_dir, "negative-mode", "static-reports"),
-            "heatmaps": os.path.join(base_dir, "negative-mode", "heatmaps")
-        }
+            "heatmaps": os.path.join(base_dir, "negative-mode", "heatmaps"),
+        },
     }
-    
+
     # Create all directories
     for mode in ["positive", "negative"]:
         for dir_path in dirs[mode].values():
             os.makedirs(dir_path, exist_ok=True)
-    
+
     os.makedirs(dirs["plate_comparisons"], exist_ok=True)
-    
+
     return dirs
-
-
-
