@@ -641,71 +641,105 @@ class BulkAnalyser:
 
         # Process each compound
         for compound_idx in range(no_compounds):
-            compound_data = self._extract_single_compound(
+            compound_results = self._extract_single_compound(
                 sample_id, row, compound_type, compound_idx
             )
 
-            if compound_data:
-                samples[sample_id]["compounds"].append(compound_data)
+            # Handle the case where we get a list of results (one per mode)
+            if isinstance(compound_results, list):
+                for result in compound_results:
+                    if result:  # Skip None results
+                        samples[sample_id]["compounds"].append(result)
+            elif compound_results:  # For backward compatibility
+                samples[sample_id]["compounds"].append(compound_results)
 
     def _extract_single_compound(self, sample_id, row, compound_type, compound_idx):
-        """Extract data for a single compound"""
+        """Extract data for a single compound in all configured modes"""
         # Get compound information
         compound_column = f"{compound_type}-{compound_idx + 1}"
         smiles_value = row.get(compound_column)
 
-        # Skip if no SMILES
+        # Skip if no SMILES or name
         if not isinstance(smiles_value, str) or not smiles_value.strip():
             return None
+            
+        # Special handling for internal standards - convert name to SMILES
+        if compound_type == "internal-std":
+            std_name = smiles_value  # This is actually the name, not SMILES
+            smiles_found = False
+            
+            # Look up SMILES from config
+            for is_info in (self.config.get("conversion", {})
+                            .get("internal_standards", {})
+                            .get("standards", [])):
+                if is_info.get("name") == std_name:
+                    smiles_value = is_info.get("smiles")
+                    smiles_found = True
+                    self.logger.info(f"Found SMILES for internal standard {std_name}: {smiles_value}")
+                    break
+                    
+            if not smiles_found:
+                self.logger.warning(f"No SMILES found in config for internal standard: {std_name}")
+                return None
 
         # Desalt SMILES
         smiles_value = self.desalt_smiles(smiles_value)
-
-        # Get analysis results for Positive mode
-        mode = "Positive"
-        signal_column = f"{compound_type}-{compound_idx + 1}-max-EIC-signal-{mode}"
-        eic_area_column = f"{compound_type}-{compound_idx + 1}-EIC-area-{mode}"
-        mz_match_column = f"{compound_type}-{compound_idx + 1}-max-mz-match-{mode}"
-
-        # Skip if analysis wasn't completed
-        if signal_column not in row or pd.isna(row[signal_column]):
-            return None
-
+        
         # Create RDKit molecule
         try:
             mol = Chem.MolFromSmiles(smiles_value)
             if mol is None:
-                self.logger.warning(
-                    f"Could not create molecule from SMILES: {smiles_value}"
-                )
+                self.logger.warning(f"Could not create molecule from SMILES: {smiles_value}")
                 return None
         except Exception as e:
             self.logger.error(f"Error creating molecule: {str(e)}")
             return None
 
-        # Get the compound's mass spectrum and other data
-        rt_max, intensity_max, eic_data, mz_strongest, all_mz_data = (
-            self._get_compound_ms_data(
-                sample_id, row, compound_type, compound_idx, smiles_value, mode
-            )
-        )
-
-        # Create compound entry
-        return {
-            "compound_name": f"{compound_type.capitalize()} {compound_idx + 1}",
-            "compound_type": compound_type,
-            "msmode": mode,
-            "mol": mol,
-            "smiles": smiles_value,
-            "rt_max": rt_max,
-            "intensity_max": intensity_max,
-            "EIC_data": eic_data,
-            "signal": row.get(signal_column),
-            "EIC_area": row.get(eic_area_column),
-            "max_mz_match": row.get(mz_match_column, "False") == "True",
-            "mz_strongest": mz_strongest,
-            "all_mz_data": all_mz_data,
-        }
+        # Get available modes from config
+        modes = self.config.get("parameters", {}).get("modes", ["Positive"])
+        
+        # Process each mode and collect all results
+        compound_results = []
+        
+        for mode in modes:
+            try:
+                # Construct column names based on mode
+                signal_column = f"{compound_type}-{compound_idx + 1}-max-EIC-signal-{mode}"
+                eic_area_column = f"{compound_type}-{compound_idx + 1}-EIC-area-{mode}" 
+                mz_match_column = f"{compound_type}-{compound_idx + 1}-max-mz-match-{mode}"
+                
+                # Get MS data for this mode
+                rt_max, intensity_max, eic_data, mz_strongest, all_mz_data = (
+                    self._get_compound_ms_data(
+                        sample_id, row, compound_type, compound_idx, smiles_value, mode
+                    )
+                )
+                
+                # Create result for this mode
+                mode_result = {
+                    "compound_name": f"{compound_type.capitalize()} {compound_idx + 1}",
+                    "compound_type": compound_type,
+                    "msmode": mode,
+                    "mol": mol,
+                    "smiles": smiles_value,
+                    "rt_max": rt_max,
+                    "intensity_max": intensity_max,
+                    "EIC_data": eic_data,
+                    "signal": row.get(signal_column),
+                    "EIC_area": row.get(eic_area_column),
+                    "max_mz_match": row.get(mz_match_column, "False") == "True",
+                    "mz_strongest": mz_strongest,
+                    "all_mz_data": all_mz_data,
+                }
+                
+                # Add this mode's result to the collection
+                compound_results.append(mode_result)
+                
+            except Exception as e:
+                self.logger.error(f"Error processing {compound_type} {compound_idx+1} in {mode} mode: {str(e)}")
+    
+        # Also need to update _extract_compound_data to handle lists:
+        return compound_results
 
     def _get_compound_ms_data(
         self, sample_id, row, compound_type, compound_idx, smiles_value, mode
@@ -929,10 +963,10 @@ class BulkAnalyser:
             # Flatten column names
             sample_summary.columns = [
                 "sample_id",
-                "mean_conversion",
-                "std_conversion",
-                "min_conversion",
-                "max_conversion",
+                "mean_concentration",
+                "std_concentration",
+                "min_concentration",
+                "max_concentration",
                 "measurement_count",
             ]
 
@@ -948,17 +982,17 @@ class BulkAnalyser:
             # Group by reactant and calculate statistics
             reactant_summary = (
                 conversion_df.groupby("reactant_name")
-                .agg({"conversion_percent": ["mean", "std", "min", "max", "count"]})
+                .agg({"concentration_reactant_uM": ["mean", "std", "min", "max", "count"]})
                 .reset_index()
             )
 
             # Flatten column names
             reactant_summary.columns = [
                 "reactant_name",
-                "mean_conversion",
-                "std_conversion",
-                "min_conversion",
-                "max_conversion",
+                "mean_concentration",
+                "std_concentration",
+                "min_concentration",
+                "max_concentration",
                 "measurement_count",
             ]
 
@@ -970,6 +1004,38 @@ class BulkAnalyser:
             self.logger.info(f"Saved reactant conversion summary to: {reactant_path}")
         except Exception as e:
             self.logger.error(f"Error generating reactant summary: {str(e)}")
+            
+        # ===== 4. NEW: Generate summary by internal standard and reactant =====
+        try:
+            # Group by reactant and internal standard to compare different standards
+            is_summary = (
+                conversion_df.groupby(["reactant_name", "internal_standard", "mode"])
+                .agg({
+                    "concentration_reactant_uM": ["mean", "std", "min", "max", "count"],
+                    "response_factor": ["mean"]
+                })
+                .reset_index()
+            )
+            
+            # Flatten column names
+            is_summary.columns = [
+                "reactant_name", 
+                "internal_standard", 
+                "mode",
+                "mean_concentration", 
+                "std_concentration", 
+                "min_concentration", 
+                "max_concentration", 
+                "measurement_count",
+                "mean_response_factor"
+            ]
+            
+            is_path = os.path.join(report_dir, f"is_comparison_{timestamp}.csv")
+            is_summary.to_csv(is_path, index=False)
+            report_paths["is_summary"] = is_path
+            self.logger.info(f"Saved internal standard comparison to: {is_path}")
+        except Exception as e:
+            self.logger.error(f"Error generating internal standard comparison: {str(e)}")
 
         self.logger.info(
             f"Generated {len(report_paths)} conversion reports in {report_dir}"
@@ -1371,12 +1437,6 @@ class BulkAnalyser:
     def calculate_conversions(self, response_factors):
         """
         Calculate conversions for each sample based on response factors
-
-        Args:
-            response_factors: Dictionary of response factors between reactants and internal standards
-
-        Returns:
-            DataFrame with conversion results
         """
         self.logger.info("Calculating conversions for samples...")
 
@@ -1400,17 +1460,11 @@ class BulkAnalyser:
                 is_col = f"internal-std-{j}"
                 if is_col in sample_data.index and not pd.isna(sample_data[is_col]):
                     is_name = sample_data[is_col]
-                    present_standards[is_name] = (
-                        j  # Store position index for potential concentration lookup
-                    )
-                    self.logger.info(
-                        f"Found internal standard: {is_name} in sample {sample_id}"
-                    )
+                    present_standards[is_name] = j  # Store position index for potential concentration lookup
+                    self.logger.info(f"Found internal standard: {is_name} in sample {sample_id}")
 
             if not present_standards:
-                self.logger.warning(
-                    f"No internal standards found in sample {sample_id}"
-                )
+                self.logger.warning(f"No internal standards found in sample {sample_id}")
                 continue
 
             # Find available reactants in this sample
@@ -1422,35 +1476,24 @@ class BulkAnalyser:
                 is_config = None
                 is_custom_mw = None
                 is_smiles = None
-                for is_info in self.config["conversion"]["internal_standards"].get(
-                    "standards", []
-                ):
+                is_modes = None
+                
+                for is_info in self.config["conversion"]["internal_standards"].get("standards", []):
                     if is_info["name"] == is_name:
                         is_config = is_info
                         is_custom_mw = is_info.get("molecular_weight", None)
                         is_smiles = is_info["smiles"]
-                        is_conc = is_info.get(
-                            "concentration_uM",
-                            self.config["conversion"]["internal_standards"].get(
-                                "default_concentration_uM", 100.0
-                            ),
-                        )
+                        is_conc = is_info.get("concentration_uM",
+                            self.config["conversion"]["internal_standards"].get("default_concentration_uM", 100.0))
+                        is_modes = is_info.get("modes", ["Positive", "Negative"])  # Get allowed modes
                         break
 
                 if is_config is None:
-                    self.logger.warning(
-                        f"Internal standard {is_name} not found in configuration"
-                    )
+                    self.logger.warning(f"Internal standard {is_name} not found in configuration")
                     continue
-
-                # Extract internal standard signal from this sample
-                is_signal = self._extract_compound_signal(
-                    mzML_filepath, is_smiles, "Positive", custom_mw=is_custom_mw
-                )
-                if is_signal == 0:
-                    self.logger.warning(
-                        f"No signal detected for internal standard {is_name} in sample {sample_id}"
-                    )
+                
+                if is_smiles is None:
+                    self.logger.warning(f"No SMILES found for internal standard {is_name}")
                     continue
 
                 # Process each reactant in this sample
@@ -1460,24 +1503,52 @@ class BulkAnalyser:
                     reactant_smiles = sample_data.get(reactant_col)
 
                     # Skip if no SMILES
-                    if (
-                        not isinstance(reactant_smiles, str)
-                        or not reactant_smiles.strip()
-                    ):
+                    if not isinstance(reactant_smiles, str) or not reactant_smiles.strip():
                         continue
 
                     # Desalt SMILES
                     reactant_smiles = self.desalt_smiles(reactant_smiles)
+                    
+                    # Check if corresponding product was detected (in any mode)
+                    product_found = False
+                    
+                    # Check for product in Positive mode
+                    product_area_pos = f"product-{i}-EIC-area-Positive"
+                    if (product_area_pos in sample_data.index and 
+                        not pd.isna(sample_data[product_area_pos]) and 
+                        float(sample_data[product_area_pos]) > 0):
+                        product_found = True
+                        self.logger.info(f"Product {i} found in Positive mode for sample {sample_id}")
+                    
+                    # Check for product in Negative mode if not already found
+                    if not product_found:
+                        product_area_neg = f"product-{i}-EIC-area-Negative"
+                        if (product_area_neg in sample_data.index and 
+                            not pd.isna(sample_data[product_area_neg]) and 
+                            float(sample_data[product_area_neg]) > 0):
+                            product_found = True
+                            self.logger.info(f"Product {i} found in Negative mode for sample {sample_id}")
 
-                    # Check if we have a response factor for this pair
+                    # Check if we have response factors for this pair in different modes
                     rf_key_pos = f"{reactant_name}_{is_name}_Positive"
                     rf_key_neg = f"{reactant_name}_{is_name}_Negative"
 
-                    for mode, rf_key in [
-                        ("Positive", rf_key_pos),
-                        ("Negative", rf_key_neg),
-                    ]:
+                    for mode, rf_key in [("Positive", rf_key_pos), ("Negative", rf_key_neg)]:
+                        # Skip modes that aren't defined for this internal standard
+                        if mode not in is_modes:
+                            self.logger.debug(f"Skipping {mode} mode for {is_name} - not in allowed modes: {is_modes}")
+                            continue
+                            
                         if rf_key not in response_factors:
+                            continue
+
+                        # Extract internal standard signal in the appropriate mode
+                        is_signal = self._extract_compound_signal(
+                            mzML_filepath, is_smiles, mode, custom_mw=is_custom_mw
+                        )
+                        
+                        if is_signal == 0:
+                            self.logger.warning(f"No signal detected for internal standard {is_name} in {mode} mode for sample {sample_id}")
                             continue
 
                         # Get response factor data
@@ -1486,49 +1557,37 @@ class BulkAnalyser:
 
                         # Get reactant signal (if exists in batch data)
                         signal_column = f"{reactant_col}-EIC-area-{mode}"
-                        if signal_column in sample_data.index and not pd.isna(
-                            sample_data[signal_column]
-                        ):
+                        if signal_column in sample_data.index and not pd.isna(sample_data[signal_column]):
                             reactant_signal = sample_data[signal_column]
 
                             # Calculate conversion
-                            concentration_reactant = (
-                                ((reactant_signal / is_signal) * is_conc)
-                                / response_factor
-                                if is_signal > 0 and response_factor > 0
-                                else 0
-                            )
+                            concentration_reactant = ((reactant_signal / is_signal) * is_conc) / response_factor if is_signal > 0 and response_factor > 0 else 0
 
-                            # Store result
-                            conversion_results.append(
-                                {
-                                    "sample_id": sample_id,
-                                    "reactant_name": reactant_name,
-                                    "reactant_idx": i,
-                                    "internal_standard": is_name,
-                                    "mode": mode,
-                                    "reactant_signal": reactant_signal,
-                                    "is_signal": is_signal,
-                                    "response_factor": response_factor,
-                                    "is_concentration_uM": is_conc,
-                                    "concentration_reactant_uM": concentration_reactant,
-                                }
-                            )
+                            # Store result with product detection info
+                            conversion_results.append({
+                                "sample_id": sample_id,
+                                "reactant_name": reactant_name,
+                                "reactant_idx": i,
+                                "internal_standard": is_name,
+                                "mode": mode,
+                                "reactant_signal": reactant_signal,
+                                "is_signal": is_signal,
+                                "response_factor": response_factor,
+                                "is_concentration_uM": is_conc,
+                                "concentration_reactant_uM": concentration_reactant,
+                                "product_found": product_found  # Add product detection status
+                            })
 
                             # Also add to batch data
                             col_name = f"reactant-{i}-concentration-{mode}-{is_name}"
                             self.batch_data.loc[idx, col_name] = concentration_reactant
 
-                            self.logger.info(
-                                f"Calculated concentration for {reactant_name} using {is_name}: {concentration_reactant:.2f}%"
-                            )
+                            self.logger.info(f"Calculated concentration for {reactant_name} using {is_name} in {mode} mode: {concentration_reactant:.2f} μM")
 
         # Create DataFrame from results
         if conversion_results:
             df = pd.DataFrame(conversion_results)
-            self.logger.info(
-                f"Created conversion results DataFrame with {len(df)} rows"
-            )
+            self.logger.info(f"Created conversion results DataFrame with {len(df)} rows")
             return df
         else:
             self.logger.warning("No conversion results were calculated")
@@ -1556,7 +1615,7 @@ logger.info(f"Logging to file: {log_file}")
 
 # Initialize with config
 analyzer = BulkAnalyser(
-    "/Users/bvh64415/myrepos/mscheck/tests/testdata/bulk-test/mscheck_config_no_conversion.yaml"
+    "/Users/bvh64415/Library/CloudStorage/OneDrive-DiamondLightSourceLtd/FFF-projects/DENV-NS2B3-NS3(MedChemica)/CAR/flavi-t3c-i2a/QC/flavi-t3c-i2a xp00-xp02 with IS/open_source_with_uv/mscheck/mscheck_config_flavi.yaml"
 )
 
 # # Run specific steps as needed
