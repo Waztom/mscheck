@@ -15,6 +15,7 @@ from analyse import AnalyseSpectrum
 from report import MSReport
 from heatmap import MSHeatmapGenerator
 from logging_config import setup_logger, get_logger
+from utils import monitor_memory
 
 
 class BulkAnalyser:
@@ -295,70 +296,80 @@ class BulkAnalyser:
                                     )
 
                                     # Perform analysis
-                                    analysis_obj = AnalyseSpectrum(
-                                        mzMLfilepath=mzML_filepath, mode=mode
-                                    )
-
-                                    # Set and log default ions if none provided, based on mode
-                                    if not analysis_type_ions_to_add:
-                                        analysis_type_ions_to_add = ["[H]"]
-                                        self.logger.info(
-                                            f"No ions specified, using default for {mode} mode: {analysis_type_ions_to_add}"
-                                        )
-                                    else:
-                                        self.logger.info(
-                                            f"Using specified ions for {mode} mode: {analysis_type_ions_to_add}"
+                                    analysis_obj = None
+                                    try: 
+                                        analysis_obj = AnalyseSpectrum(
+                                            mzMLfilepath=mzML_filepath, mode=mode
                                         )
 
-                                    # Log actual SMILES representation of ions being addeed
-                                    self.logger.info(
-                                        f"Final ion SMILES for {mode} mode: {analysis_type_ions_to_add}"
-                                    )
+                                        # Set and log default ions if none provided, based on mode
+                                        if not analysis_type_ions_to_add:
+                                            analysis_type_ions_to_add = ["[H]"]
+                                            self.logger.info(
+                                                f"No ions specified, using default for {mode} mode: {analysis_type_ions_to_add}"
+                                            )
+                                        else:
+                                            self.logger.info(
+                                                f"Using specified ions for {mode} mode: {analysis_type_ions_to_add}"
+                                            )
 
-                                    # Now perform the analysis
-                                    analysis_obj.analyse(
-                                        compoundsmiles=analysis_type_smiles,
-                                        ionstoadd=analysis_type_ions_to_add,
-                                        ionstosub=analysis_type_ions_to_sub,
-                                        tolerance=analysis_type_match_tolerance,
-                                    )
+                                        # Log actual SMILES representation of ions being addeed
+                                        self.logger.info(
+                                            f"Final ion SMILES for {mode} mode: {analysis_type_ions_to_add}"
+                                        )
 
-                                    # Calculate EIC area
-                                    eic_area = analysis_obj.calculate_eic_area()
-                                    self.logger.info(f"EIC Area: {eic_area:.2f}")
+                                        # Now perform the analysis
+                                        analysis_obj.analyse(
+                                            compoundsmiles=analysis_type_smiles,
+                                            ionstoadd=analysis_type_ions_to_add,
+                                            ionstosub=analysis_type_ions_to_sub,
+                                            tolerance=analysis_type_match_tolerance,
+                                        )
 
-                                    # Create report
-                                    report_subdir = os.path.join(self.report_dir, mode)
-                                    report_name = f"{sample_id}_{analysis_type}_{compound_idx + 1}"
-                                    analysis_obj.create_report(
-                                        folder=report_subdir, compound_name=report_name
-                                    )
+                                        # Calculate EIC area
+                                        eic_area = analysis_obj.calculate_eic_area()
+                                        self.logger.info(f"EIC Area: {eic_area:.2f}")
 
-                                    # Update results in DataFrame using proper column names
-                                    signal_column = f"{analysis_type}-{compound_idx + 1}-max-EIC-signal-{mode}"
-                                    mz_match_column = f"{analysis_type}-{compound_idx + 1}-max-mz-match-{mode}"
-                                    ions_column = f"{analysis_type}-{compound_idx + 1}-ions-matched-{mode}"
-                                    eic_area_column = f"{analysis_type}-{compound_idx + 1}-EIC-area-{mode}"
+                                        # Create report
+                                        report_subdir = os.path.join(self.report_dir, mode)
+                                        report_name = f"{sample_id}_{analysis_type}_{compound_idx + 1}"
+                                        analysis_obj.create_report(
+                                            folder=report_subdir, compound_name=report_name
+                                        )
 
-                                    # Use loc to properly update DataFrame
-                                    self.batch_data.loc[batch_index, signal_column] = (
-                                        analysis_obj.analysedata["max_EIC_signal"]
-                                    )
-                                    self.batch_data.loc[
-                                        batch_index, mz_match_column
-                                    ] = str(analysis_obj.analysedata["max_mz_match"])
-                                    self.batch_data.loc[batch_index, ions_column] = str(
-                                        analysis_obj.analysedata["ions"]
-                                    )
-                                    self.batch_data.loc[
-                                        batch_index, eic_area_column
-                                    ] = eic_area
+                                        # Update results in DataFrame using proper column names
+                                        signal_column = f"{analysis_type}-{compound_idx + 1}-max-EIC-signal-{mode}"
+                                        mz_match_column = f"{analysis_type}-{compound_idx + 1}-max-mz-match-{mode}"
+                                        ions_column = f"{analysis_type}-{compound_idx + 1}-ions-matched-{mode}"
+                                        eic_area_column = f"{analysis_type}-{compound_idx + 1}-EIC-area-{mode}"
 
-                                    successful_analyses += 1
+                                        # Use loc to properly update DataFrame
+                                        self.batch_data.loc[batch_index, signal_column] = (
+                                            analysis_obj.analysedata["max_EIC_signal"]
+                                        )
+                                        self.batch_data.loc[
+                                            batch_index, mz_match_column
+                                        ] = str(analysis_obj.analysedata["max_mz_match"])
+                                        self.batch_data.loc[batch_index, ions_column] = str(
+                                            analysis_obj.analysedata["ions"]
+                                        )
+                                        self.batch_data.loc[
+                                            batch_index, eic_area_column
+                                        ] = eic_area
+
+                                        successful_analyses += 1
+                                    finally:
+                                        # Clean up the analysis object
+                                        if analysis_obj is not None:
+                                            del analysis_obj
+                                            import gc
+                                            gc.collect()
+
                                 except Exception as e:
                                     error_msg = f"Error analyzing {analysis_type}-{compound_idx + 1} in {mode} for sample {sample_id}: {str(e)}"
                                     self.errors.append(error_msg)
                                     self.logger.error(error_msg)
+                                    
                     except Exception as e:
                         error_msg = f"Error processing {analysis_type} for sample {sample_id}: {str(e)}"
                         self.errors.append(error_msg)
@@ -616,6 +627,7 @@ class BulkAnalyser:
         if samples[sample_id]["RT_values"] is not None:
             return  # Already loaded
 
+        temp_analyzer = None
         try:
             # Find mzML file
             mzML_filename = row["mzML-filename"]
@@ -624,15 +636,25 @@ class BulkAnalyser:
                 # Create analyzer to get RT/TIC
                 mode = "Positive"
                 temp_analyzer = AnalyseSpectrum(mzMLfilepath=mzML_filepath, mode=mode)
-                samples[sample_id]["RT_values"] = temp_analyzer.MSdata["RT"]
-                samples[sample_id]["TIC_values"] = temp_analyzer.MSdata["TIC"]
+                
+                # Create copies instead of references to ensure data persists after analyzer is deleted
+                if "RT" in temp_analyzer.MSdata:
+                    samples[sample_id]["RT_values"] = temp_analyzer.MSdata["RT"].copy() 
+                if "TIC" in temp_analyzer.MSdata:
+                    samples[sample_id]["TIC_values"] = temp_analyzer.MSdata["TIC"].copy()
 
-                # Store MZ data if available
+                # Store MZ data if available - make a copy to avoid reference issues
                 if "mz_data" in temp_analyzer.MSdata:
-                    samples[sample_id]["all_mz_data"] = temp_analyzer.MSdata["mz_data"]
+                    samples[sample_id]["all_mz_data"] = temp_analyzer.MSdata["mz_data"].copy()
                     self.logger.info(f"Added complete MZ data to sample {sample_id}")
         except Exception as e:
             self.logger.error(f"Error loading RT/TIC for sample {sample_id}: {str(e)}")
+        finally:
+            # Clean up analyzer object
+            if temp_analyzer is not None:
+                del temp_analyzer
+                import gc
+                gc.collect()
 
     def _extract_compound_data(self, samples, sample_id, row, compound_type):
         """Extract compound data for a specific compound type"""
@@ -744,7 +766,6 @@ class BulkAnalyser:
     def _get_compound_ms_data(
         self, sample_id, row, compound_type, compound_idx, smiles_value, mode
     ):
-        """Get mass spectrum data for a compound"""
         rt_max = None
         intensity_max = None
         eic_data = None
@@ -781,7 +802,7 @@ class BulkAnalyser:
                 tolerance=tolerance,
             )
 
-            # Extract RT max and intensity max
+             # Extract RT max and intensity max
             if (
                 "RT" in temp_analyzer.analysedata
                 and len(temp_analyzer.analysedata["RT"]) > 0
@@ -833,6 +854,7 @@ class BulkAnalyser:
             self.logger.error(f"Error extracting MS data: {str(e)}")
 
         return rt_max, intensity_max, eic_data, mz_strongest, all_mz_data
+
 
     def generate_compound_reports(self, samples=None):
         """Generate multi-compound reports for samples"""
@@ -1049,6 +1071,9 @@ class BulkAnalyser:
         Returns:
             Dictionary mapping sample IDs to their report paths
         """
+        # Log initial memory usage
+        monitor_memory("Workflow start", self.logger)
+
         # Get parameters from config
         analysis_types = self.config["parameters"]["analysis_types"]
         modes = self.config["parameters"]["modes"]
@@ -1063,6 +1088,8 @@ class BulkAnalyser:
         self.process_samples(
             analysis_types=analysis_types, modes=modes, tolerance=tolerance
         )
+        monitor_memory("After sample processing", self.logger)
+
 
         # 2. Calculate response factors and conversions if enabled
         if "conversion" in self.config and self.config["conversion"].get(
@@ -1103,7 +1130,8 @@ class BulkAnalyser:
 
         self.logger.info("\nAnalysis and visualization complete!")
         self.logger.info(f"Reports saved to: {self.report_dir}")
-
+        
+        monitor_memory("Workflow complete", self.logger)
         return report_paths
 
     def get_compound_count(self, row, compound_type):
@@ -1382,11 +1410,10 @@ class BulkAnalyser:
         Returns:
             EIC area or 0 if not found
         """
+        analyzer = None
         try:
-            # Log compound details
-            self.logger.info(
-                f"Extracting signal for SMILES: {smiles} in {mode} mode with custom MW: {custom_mw}"
-            )
+            # Log compound details (keep existing logging)
+            self.logger.info(f"Extracting signal for SMILES: {smiles} in {mode} mode with custom MW: {custom_mw}")
 
             # Calculate or use provided molecular weight
             if custom_mw is not None:
@@ -1398,11 +1425,13 @@ class BulkAnalyser:
                 if mol:
                     mw = Descriptors.MolWt(mol)
                     self.logger.info(f"Calculated molecular weight: {mw:.2f} Da")
+                    # Clean up the molecule object
+                    del mol
                 else:
                     self.logger.warning(f"Could not calculate MW from SMILES: {smiles}")
                     return 0
 
-            # Calculate m/z values to search for
+            # Keep existing m/z logging
             if mode == "Positive":
                 self.logger.info(f"Expected m/z (M+H)+: {mw + 1.007825:.4f}")
             else:
@@ -1411,7 +1440,7 @@ class BulkAnalyser:
             # Create analyzer for this mode
             analyzer = AnalyseSpectrum(mzMLfilepath=mzML_filepath, mode=mode)
 
-            # Default ions based on mode - need to fix this! Must come from config or csv
+            # Default ions based on mode - keep existing code
             ions_to_add = ["[H]"]
 
             # Run analysis with custom MW
@@ -1429,14 +1458,19 @@ class BulkAnalyser:
             return eic_area
 
         except Exception as e:
-            self.logger.error(
-                f"Error extracting signal for {smiles} in {mode} mode: {str(e)}"
-            )
+            self.logger.error(f"Error extracting signal for {smiles} in {mode} mode: {str(e)}")
             return 0
+            
+        finally:
+            # Explicit cleanup to free memory
+            if analyzer is not None:
+                del analyzer
+                import gc
+                gc.collect()
 
     def calculate_conversions(self, response_factors):
         """
-        Calculate conversions for each sample based on response factors
+        Calculate conversions for each sample with detailed product detection reporting
         """
         self.logger.info("Calculating conversions for samples...")
 
@@ -1460,7 +1494,7 @@ class BulkAnalyser:
                 is_col = f"internal-std-{j}"
                 if is_col in sample_data.index and not pd.isna(sample_data[is_col]):
                     is_name = sample_data[is_col]
-                    present_standards[is_name] = j  # Store position index for potential concentration lookup
+                    present_standards[is_name] = j
                     self.logger.info(f"Found internal standard: {is_name} in sample {sample_id}")
 
             if not present_standards:
@@ -1469,8 +1503,34 @@ class BulkAnalyser:
 
             # Find available reactants in this sample
             reactant_count = self.get_compound_count(sample_data, "reactant")
-
-            # Process each reactant/internal standard combination that has a response factor
+            
+            # NEW: Get detailed product detection information
+            product_count = self.get_compound_count(sample_data, "product")
+            products_found = []
+            
+            # Check each product in each mode and collect ALL products found
+            for p_idx in range(1, product_count + 1):
+                # Check in Positive mode
+                p_area_pos = f"product-{p_idx}-EIC-area-Positive"
+                if (p_area_pos in sample_data.index and 
+                    not pd.isna(sample_data[p_area_pos]) and 
+                    float(sample_data[p_area_pos]) > 0):
+                    products_found.append(f"Product-{p_idx}-Positive")
+                    self.logger.info(f"Product {p_idx} found in Positive mode for sample {sample_id}")
+                    
+                # Check in Negative mode
+                p_area_neg = f"product-{p_idx}-EIC-area-Negative"
+                if (p_area_neg in sample_data.index and 
+                    not pd.isna(sample_data[p_area_neg]) and 
+                    float(sample_data[p_area_neg]) > 0):
+                    products_found.append(f"Product-{p_idx}-Negative")
+                    self.logger.info(f"Product {p_idx} found in Negative mode for sample {sample_id}")
+            
+            # Create a comma-separated list of found products
+            products_found_str = ", ".join(products_found) if products_found else "No products detected"
+           
+            
+            # Process each reactant/internal standard combination
             for is_name, is_idx in present_standards.items():
                 # Get internal standard info from config
                 is_config = None
@@ -1485,7 +1545,7 @@ class BulkAnalyser:
                         is_smiles = is_info["smiles"]
                         is_conc = is_info.get("concentration_uM",
                             self.config["conversion"]["internal_standards"].get("default_concentration_uM", 100.0))
-                        is_modes = is_info.get("modes", ["Positive", "Negative"])  # Get allowed modes
+                        is_modes = is_info.get("modes", ["Positive", "Negative"])
                         break
 
                 if is_config is None:
@@ -1509,26 +1569,27 @@ class BulkAnalyser:
                     # Desalt SMILES
                     reactant_smiles = self.desalt_smiles(reactant_smiles)
                     
-                    # Check if corresponding product was detected (in any mode)
-                    product_found = False
-                    
-                    # Check for product in Positive mode
-                    product_area_pos = f"product-{i}-EIC-area-Positive"
-                    if (product_area_pos in sample_data.index and 
-                        not pd.isna(sample_data[product_area_pos]) and 
-                        float(sample_data[product_area_pos]) > 0):
-                        product_found = True
-                        self.logger.info(f"Product {i} found in Positive mode for sample {sample_id}")
-                    
-                    # Check for product in Negative mode if not already found
-                    if not product_found:
-                        product_area_neg = f"product-{i}-EIC-area-Negative"
-                        if (product_area_neg in sample_data.index and 
-                            not pd.isna(sample_data[product_area_neg]) and 
-                            float(sample_data[product_area_neg]) > 0):
-                            product_found = True
-                            self.logger.info(f"Product {i} found in Negative mode for sample {sample_id}")
+                   # First check if ANY product was found in this sample (across all indices)
+                    product_count = self.get_compound_count(sample_data, "product")
 
+                    # Check all products in all modes
+                    for p_idx in range(1, product_count + 1):
+                        # Check in Positive mode
+                        p_area_pos = f"product-{p_idx}-EIC-area-Positive"
+                        if (p_area_pos in sample_data.index and 
+                            not pd.isna(sample_data[p_area_pos]) and 
+                            float(sample_data[p_area_pos]) > 0):
+                            self.logger.info(f"Product found in sample {sample_id} (product #{p_idx}, Positive mode)")
+                            break  # Found at least one product
+                            
+                        # Check in Negative mode
+                        p_area_neg = f"product-{p_idx}-EIC-area-Negative"
+                        if (p_area_neg in sample_data.index and 
+                            not pd.isna(sample_data[p_area_neg]) and 
+                            float(sample_data[p_area_neg]) > 0):
+                            self.logger.info(f"Product found in sample {sample_id} (product #{p_idx}, Negative mode)")
+                            break  # Found at least one product
+                        
                     # Check if we have response factors for this pair in different modes
                     rf_key_pos = f"{reactant_name}_{is_name}_Positive"
                     rf_key_neg = f"{reactant_name}_{is_name}_Negative"
@@ -1563,7 +1624,7 @@ class BulkAnalyser:
                             # Calculate conversion
                             concentration_reactant = ((reactant_signal / is_signal) * is_conc) / response_factor if is_signal > 0 and response_factor > 0 else 0
 
-                            # Store result with product detection info
+                            # Store result with ENHANCED product detection info
                             conversion_results.append({
                                 "sample_id": sample_id,
                                 "reactant_name": reactant_name,
@@ -1575,14 +1636,15 @@ class BulkAnalyser:
                                 "response_factor": response_factor,
                                 "is_concentration_uM": is_conc,
                                 "concentration_reactant_uM": concentration_reactant,
-                                "product_found": product_found  # Add product detection status
+                                "products_detected": products_found_str,  # Add the detailed list
+                                "product_count": len(products_found)  # Add count of products found
                             })
 
                             # Also add to batch data
                             col_name = f"reactant-{i}-concentration-{mode}-{is_name}"
                             self.batch_data.loc[idx, col_name] = concentration_reactant
 
-                            self.logger.info(f"Calculated concentration for {reactant_name} using {is_name} in {mode} mode: {concentration_reactant:.2f} μM")
+                            self.logger.info(f"Calculated concentration for {reactant_name} using {is_name} in {mode} mode: {concentration_reactant:.2f} uM")
 
         # Create DataFrame from results
         if conversion_results:
@@ -1615,7 +1677,7 @@ logger.info(f"Logging to file: {log_file}")
 
 # Initialize with config
 analyzer = BulkAnalyser(
-    "/Users/bvh64415/Library/CloudStorage/OneDrive-DiamondLightSourceLtd/FFF-projects/DENV-NS2B3-NS3(MedChemica)/CAR/flavi-t3c-i2a/QC/flavi-t3c-i2a xp00-xp02 with IS/open_source_with_uv/mscheck/mscheck_config_flavi.yaml"
+    "/Users/bvh64415/myrepos/mscheck/tests/testdata/bulk-test/mscheck_config_no_conversion.yaml"
 )
 
 # # Run specific steps as needed

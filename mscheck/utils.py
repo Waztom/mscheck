@@ -4,6 +4,7 @@ from rdkit.Chem import Descriptors
 from rdkit.Chem.Draw import rdMolDraw2D
 import ntpath
 import os
+import psutil
 from logging_config import get_logger
 
 # Get logger for this module
@@ -132,3 +133,36 @@ def create_report_directory_structure(base_dir: str) -> dict:
     os.makedirs(dirs["plate_comparisons"], exist_ok=True)
 
     return dirs
+
+
+def monitor_memory(label="Current", logger=None):
+    """
+    Log current memory usage
+    
+    Args:
+        label: Description of the current monitoring point
+        logger: Logger to use (defaults to utils logger if None)
+        
+    Returns:
+        Current memory usage in MB
+    """
+    if logger is None:
+        logger = get_logger(__name__)
+        
+    try:
+        process = psutil.Process()
+        mem_info = process.memory_info()
+        memory_mb = mem_info.rss / (1024 * 1024)
+        logger.info(f"Memory usage ({label}): {memory_mb:.1f} MB")
+        
+        # Also log system memory if available
+        system_memory = psutil.virtual_memory()
+        logger.info(f"System memory: {system_memory.percent}% used, {system_memory.available / (1024 * 1024 * 1024):.1f} GB available")
+        
+        return memory_mb
+    except ImportError:
+        logger.warning("Memory monitoring requires psutil. Install with 'pip install psutil'")
+        return 0
+    except Exception as e:
+        logger.warning(f"Error monitoring memory: {str(e)}")
+        return 0
