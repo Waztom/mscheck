@@ -166,3 +166,117 @@ def monitor_memory(label="Current", logger=None):
     except Exception as e:
         logger.warning(f"Error monitoring memory: {str(e)}")
         return 0
+
+def desalt_smiles(smiles: str, return_details: bool = False, logger=None):
+    """Strips salts from a SMILES string by returning the largest molecular fragment."""
+    if logger is None:
+        logger = get_logger(__name__)
+
+    try:
+        # Skip empty or non-string inputs
+        if not isinstance(smiles, str) or not smiles.strip():
+            return (smiles, False, []) if return_details else smiles
+
+        # Quick check - if no periods, not a salt
+        if "." not in smiles:
+            return (smiles, False, []) if return_details else smiles
+
+        # Convert to RDKit molecule
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            logger.warning(f"Could not parse SMILES: {smiles}")
+            return (smiles, False, []) if return_details else smiles
+
+        # Calculate molecular weight of original compound
+        original_mw = Descriptors.MolWt(mol)
+        logger.info(
+            f"Original compound MW: {original_mw:.2f} Da, SMILES: {smiles}"
+        )
+
+        # Get fragments
+        fragments = Chem.GetMolFrags(mol, asMols=True)
+        if len(fragments) <= 1:
+            # No salts present
+            return (smiles, False, []) if return_details else smiles
+
+        # Find the largest fragment by molecular weight
+        fragment_weights = [Descriptors.MolWt(frag) for frag in fragments]
+
+        # Log all fragments
+        for i, (frag, weight) in enumerate(zip(fragments, fragment_weights)):
+            frag_smiles = Chem.MolToSmiles(frag)
+            logger.info(
+                f"  Fragment {i+1}: MW {weight:.2f} Da, SMILES: {frag_smiles}"
+            )
+
+        largest_idx = fragment_weights.index(max(fragment_weights))
+        main_fragment = fragments[largest_idx]
+
+        # Convert to canonical SMILES
+        desalted_smiles = Chem.MolToSmiles(main_fragment)
+
+        logger.info(
+            f"Selected largest fragment: MW {fragment_weights[largest_idx]:.2f} Da"
+        )
+        logger.info(f"Removed salts from {smiles} -> {desalted_smiles}")
+
+        # Get salt fragments
+        salt_fragments = []
+        for i, frag in enumerate(fragments):
+            if i != largest_idx:
+                salt_smiles = Chem.MolToSmiles(frag)
+                salt_fragments.append(salt_smiles)
+
+        if salt_fragments:
+            logger.info(f"Salt fragments: {salt_fragments}")
+
+        if return_details:
+            return desalted_smiles, True, salt_fragments
+        else:
+            return desalted_smiles
+
+    except Exception as e:
+        logger.error(f"Error stripping salts from {smiles}: {str(e)}")
+        return (smiles, False, []) if return_details else smiles
+
+
+def standardise_compound(smiles: str, logger=None) -> str:
+    """
+    Convert SMILES to standardized InChI for consistent comparison
+    
+    Args:
+        smiles: Input SMILES string
+        
+    Returns:
+        Tuple of (InChI string, InChIKey) or (None, None) if conversion fails
+    """
+    if logger is None:
+        logger = get_logger(__name__)
+
+    if not isinstance(smiles, str) or not smiles.strip():
+        return None, None
+        
+    try:
+        # First desalt using existing method
+        desalted_smiles = desalt_smiles(smiles)
+        
+        # Create molecule and generate InChI
+        mol = Chem.MolFromSmiles(desalted_smiles)
+        if mol is None:
+            logger.warning(f"Could not create molecule from SMILES: {desalted_smiles}")
+            return None
+            
+        # Standardize the molecule (e.g., remove stereochemistry)
+        Chem.RemoveStereochemistry(mol)
+
+        # Generate InChI with standard options
+        inchi = Chem.MolToInchi(mol)
+        
+        if inchi:
+            return inchi
+        else:
+            return None
+            
+    except Exception as e:
+        logger.error(f"Error converting SMILES: {smiles} to InChI: {str(e)}")
+        return None

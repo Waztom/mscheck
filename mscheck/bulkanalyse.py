@@ -1,21 +1,21 @@
 from datetime import datetime
 import os
 import re
+import gc
 import logging
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 from rdkit import Chem
-import yaml
 from rdkit.Chem import Descriptors, AllChem
-
+import yaml
 
 # Local imports
 from analyse import AnalyseSpectrum
 from report import MSReport
 from heatmap import MSHeatmapGenerator
 from logging_config import setup_logger, get_logger
-from utils import monitor_memory
+from utils import monitor_memory, desalt_smiles, standardise_compound
 
 
 class BulkAnalyser:
@@ -247,7 +247,7 @@ class BulkAnalyser:
 
                             # Desalt SMILES before analysis
                             original_smiles = analysis_type_smiles
-                            desalted_smiles = self.desalt_smiles(original_smiles)
+                            desalted_smiles = desalt_smiles(original_smiles)
                             if desalted_smiles != original_smiles:
                                 self.logger.info(
                                     f"Sample {sample_id}: Desalted {compound_column} from {original_smiles} → {desalted_smiles}"
@@ -362,7 +362,6 @@ class BulkAnalyser:
                                         # Clean up the analysis object
                                         if analysis_obj is not None:
                                             del analysis_obj
-                                            import gc
                                             gc.collect()
 
                                 except Exception as e:
@@ -395,6 +394,189 @@ class BulkAnalyser:
                 f"Encountered {len(self.errors)} errors during processing"
             )
 
+        return self.batch_data
+
+    def analyse_batch_in_chunks(self, batch_size=20, analysis_types=None, modes=None, tolerance=None):
+        """
+        Process samples in smaller batches to reduce memory usage
+        
+        Args:
+            batch_size: Number of samples to process in each batch
+            analysis_types: List of analysis types (default: from config)
+            modes: List of ionization modes (default: from config)
+            tolerance: Mass tolerance in ppm (default: from config)
+            
+        Returns:
+            DataFrame with analysis results
+        """
+        # Use config parameters if not specified
+        if analysis_types is None:
+            analysis_types = self.config["parameters"]["analysis_types"]
+        if modes is None:
+            modes = self.config["parameters"]["modes"]
+        if tolerance is None:
+            tolerance = self.config["parameters"]["tolerance"]
+            
+        self.logger.info(f"Processing samples in batches of {batch_size}...")
+        monitor_memory("Before batch processing", self.logger)
+        
+        if self.batch_data is None:
+            self.load_data()
+            
+        if len(self.batch_data) == 0:
+            self.logger.warning("No data to analyze")
+            return self.batch_data
+            
+        # Create report directories
+        for mode in modes:
+            os.makedirs(os.path.join(self.report_dir, mode), exist_ok=True)
+        
+        # Track processing statistics
+        self.processed_samples = 0
+        successful_analyses = 0
+        total_analyses_attempted = 0
+        
+        # Calculate number of batches
+        total_samples = len(self.batch_data)
+        num_batches = (total_samples + batch_size - 1) // batch_size  # Ceiling division
+        
+        self.logger.info(f"Processing {total_samples} samples in {num_batches} batches")
+        
+        # Process each batch
+        for batch_idx in range(num_batches):
+            batch_start = batch_idx * batch_size
+            batch_end = min(batch_start + batch_size, total_samples)
+            
+            self.logger.info(f"Processing batch {batch_idx+1}/{num_batches} (samples {batch_start+1}-{batch_end})")
+            
+            # Process just this subset of samples
+            batch_indices = list(range(batch_start, batch_end))
+            
+            # Process each row in the batch
+            for batch_index in batch_indices:
+                row = self.batch_data.iloc[batch_index]
+                try:
+                    sample_id = str(row.get("sample-ID", f"sample_{batch_index}"))
+                    mzML_filename = row["mzML-filename"]
+                    self.logger.info(f"Processing sample {sample_id} ({batch_index + 1}/{total_samples})")
+                    
+                    # Find mzML file
+                    mzML_filepath = self.find_mzml_file(mzML_filename)
+                    if mzML_filepath is None:
+                        continue
+                        
+                    # Process each analysis type
+                    for analysis_type in analysis_types:
+                        # Get number of compounds of this type
+                        no_compounds = self.get_compound_count(row, analysis_type)
+                        if no_compounds <= 0:
+                            continue
+                        
+                        # Get ion information
+                        ions_add_column = f"{analysis_type}-ions-to-add"
+                        ions_sub_column = f"{analysis_type}-ions-to-sub"
+                        
+                        analysis_type_ions_to_add = self.parse_ions(row.get(ions_add_column, ""))
+                        analysis_type_ions_to_sub = self.parse_ions(row.get(ions_sub_column, ""))
+                        
+                        tolerance_column = f"{analysis_type}-match-tolerance"
+                        analysis_type_match_tolerance = int(row.get(tolerance_column, tolerance))
+                        
+                        # Process compounds - same logic as in analyse_batch
+                        for compound_idx in range(no_compounds):
+                            compound_column = f"{analysis_type}-{compound_idx + 1}"
+                            if compound_column not in row:
+                                continue
+                                
+                            analysis_type_smiles = row[compound_column]
+                            
+                            # Special handling for internal standards
+                            if analysis_type == "internal-std":
+                                std_name = analysis_type_smiles
+                                for is_info in self.config.get("conversion", {}).get("internal_standards", {}).get("standards", []):
+                                    if is_info.get("name") == std_name:
+                                        analysis_type_smiles = is_info.get("smiles")
+                                        break
+                                        
+                            if not isinstance(analysis_type_smiles, str) or not analysis_type_smiles.strip():
+                                continue
+                                
+                            # Desalt SMILES
+                            analysis_type_smiles = desalt_smiles(analysis_type_smiles)
+                            
+                            # Process each mode
+                            for mode in modes:
+                                try:
+                                    total_analyses_attempted += 1
+                                    
+                                    # Process with AnalyseSpectrum - same as in analyse_batch
+                                    analysis_obj = None
+                                    try:
+                                        analysis_obj = AnalyseSpectrum(mzMLfilepath=mzML_filepath, mode=mode)
+                                        
+                                        if not analysis_type_ions_to_add:
+                                            analysis_type_ions_to_add = ["[H]"]
+                                            
+                                        analysis_obj.analyse(
+                                            compoundsmiles=analysis_type_smiles,
+                                            ionstoadd=analysis_type_ions_to_add,
+                                            ionstosub=analysis_type_ions_to_sub,
+                                            tolerance=analysis_type_match_tolerance
+                                        )
+                                        
+                                        # Calculate EIC area
+                                        eic_area = analysis_obj.calculate_eic_area()
+                                        
+                                        # Create report
+                                        report_subdir = os.path.join(self.report_dir, mode)
+                                        report_name = f"{sample_id}_{analysis_type}_{compound_idx + 1}"
+                                        analysis_obj.create_report(folder=report_subdir, compound_name=report_name)
+                                        
+                                        # Update batch data
+                                        signal_column = f"{analysis_type}-{compound_idx + 1}-max-EIC-signal-{mode}"
+                                        mz_match_column = f"{analysis_type}-{compound_idx + 1}-max-mz-match-{mode}"
+                                        ions_column = f"{analysis_type}-{compound_idx + 1}-ions-matched-{mode}"
+                                        eic_area_column = f"{analysis_type}-{compound_idx + 1}-EIC-area-{mode}"
+                                        
+                                        self.batch_data.loc[batch_index, signal_column] = analysis_obj.analysedata["max_EIC_signal"]
+                                        self.batch_data.loc[batch_index, mz_match_column] = str(analysis_obj.analysedata["max_mz_match"])
+                                        self.batch_data.loc[batch_index, ions_column] = str(analysis_obj.analysedata["ions"])
+                                        self.batch_data.loc[batch_index, eic_area_column] = eic_area
+                                        
+                                        successful_analyses += 1
+                                        
+                                    finally:
+                                        # Clean up analyzer object
+                                        if analysis_obj is not None:
+                                            del analysis_obj
+                                            import gc
+                                            gc.collect()
+                                            
+                                except Exception as e:
+                                    self.logger.error(f"Error analyzing {analysis_type}-{compound_idx + 1} in {mode}: {str(e)}")
+                
+                    self.processed_samples += 1
+                    
+                except Exception as e:
+                    self.logger.error(f"Error processing sample at index {batch_index}: {str(e)}")
+                    
+            # Save intermediate results after each batch
+            intermediate_path = os.path.join(self.report_dir, f"intermediate_batch_{batch_idx+1}.csv")
+            self.batch_data.to_csv(intermediate_path, index=False)
+            self.logger.info(f"Saved intermediate results for batch {batch_idx+1} to {intermediate_path}")
+            
+            # Force garbage collection after each batch
+            import gc
+            gc.collect()
+            monitor_memory(f"After processing batch {batch_idx+1}/{num_batches}", self.logger)
+        
+        self.logger.info(f"Batch processing complete: {successful_analyses}/{total_analyses_attempted} analyses successful")
+        self.logger.info(f"Processed {self.processed_samples}/{total_samples} samples")
+        
+        # One final memory cleanup
+        gc.collect()
+        monitor_memory("After batch processing complete", self.logger)
+        
         return self.batch_data
 
     def find_mzml_file(
@@ -545,27 +727,32 @@ class BulkAnalyser:
 
     def process_samples(
         self,
-        analysis_types: List[str] = ["product", "reactant", "internal-std"],
-        modes: List[str] = ["Positive"],
-        tolerance: int = 1,
+        analysis_types=None,
+        modes=None,
+        tolerance=None,
+        batch_size=20
     ):
         """
-        Process all samples and generate individual reports
-
+        Process all samples and generate individual reports using batch processing
+        
         Args:
             analysis_types: List of compound types to analyze (e.g., product, reactant)
             modes: List of ionization modes (e.g., Positive, Negative)
             tolerance: Default mass tolerance in ppm
-
+            batch_size: Number of samples to process in each batch
+            
         Returns:
             DataFrame with analysis results
         """
         if self.batch_data is None:
             self.load_data()
 
-        # Process the samples with the specified parameters
-        self.analyse_batch(
-            analysis_types=analysis_types, modes=modes, tolerance=tolerance
+        # Process the samples in batches with the specified parameters
+        self.analyse_batch_in_chunks(
+            batch_size=batch_size,
+            analysis_types=analysis_types,
+            modes=modes,
+            tolerance=tolerance
         )
 
         # Save the results
@@ -705,7 +892,7 @@ class BulkAnalyser:
                 return None
 
         # Desalt SMILES
-        smiles_value = self.desalt_smiles(smiles_value)
+        smiles_value = desalt_smiles(smiles_value)
         
         # Create RDKit molecule
         try:
@@ -766,6 +953,7 @@ class BulkAnalyser:
     def _get_compound_ms_data(
         self, sample_id, row, compound_type, compound_idx, smiles_value, mode
     ):
+        """Get mass spectrum data for a compound with proper analyzer cleanup"""
         rt_max = None
         intensity_max = None
         eic_data = None
@@ -781,6 +969,7 @@ class BulkAnalyser:
         if not os.path.exists(report_path):
             return rt_max, intensity_max, eic_data, mz_strongest, all_mz_data
 
+        temp_analyzer = None
         try:
             # Get mzML file
             mzML_filename = row["mzML-filename"]
@@ -802,59 +991,79 @@ class BulkAnalyser:
                 tolerance=tolerance,
             )
 
-             # Extract RT max and intensity max
-            if (
-                "RT" in temp_analyzer.analysedata
-                and len(temp_analyzer.analysedata["RT"]) > 0
-            ):
+            # Extract RT max and intensity max - make copies of arrays
+            if ("RT" in temp_analyzer.analysedata 
+                    and len(temp_analyzer.analysedata["RT"]) > 0):
                 rt_values = temp_analyzer.analysedata["RT"][0]
                 tic_values = temp_analyzer.analysedata["TIC"][0]
+                
+                # Make copies if they're numpy arrays
+                if isinstance(rt_values, np.ndarray):
+                    rt_values = rt_values.copy()
+                if isinstance(tic_values, np.ndarray):
+                    tic_values = tic_values.copy()
+                    
                 if len(rt_values) > 0 and len(tic_values) > 0:
                     max_idx = np.argmax(tic_values)
                     rt_max = rt_values[max_idx]
                     intensity_max = tic_values[max_idx]
 
-            # Extract EIC data
-            if (
-                "EIC_data" in temp_analyzer.analysedata
-                and len(temp_analyzer.analysedata["EIC_data"]) > 0
-            ):
+            # Extract EIC data - make a copy
+            if ("EIC_data" in temp_analyzer.analysedata 
+                    and len(temp_analyzer.analysedata["EIC_data"]) > 0):
                 eic_data = temp_analyzer.analysedata["EIC_data"][0]
+                if isinstance(eic_data, np.ndarray):
+                    eic_data = eic_data.copy()
 
-                # Add this to log details about matches
-                if "matched_ions" in temp_analyzer.analysedata:
-                    matches = temp_analyzer.analysedata["matched_ions"]
-                    for i, match in enumerate(matches):
-                        formula = match.get("formula", "Unknown")
-                        mz_theoretical = match.get("mz_theoretical", 0)
-                        mz_found = match.get("mz_found", 0)
-                        ppm_error = match.get("ppm_error", 0)
-                        adduct = match.get("adduct", "Unknown")
-
-                        self.logger.info(f"Match {i+1}: {formula} as {adduct}")
-                        self.logger.info(
-                            f"  m/z theoretical: {mz_theoretical:.4f}, found: {mz_found:.4f}, error: {ppm_error:.2f} ppm"
-                        )
-
-            # Extract mass spectrum data
-            if (
-                "mz_strongest" in temp_analyzer.analysedata
-                and len(temp_analyzer.analysedata["mz_strongest"]) > 0
-            ):
-                mz_masses, mz_intensities, _ = temp_analyzer.analysedata[
-                    "mz_strongest"
-                ][0]
+            # Extract mass spectrum data - make copies
+            if ("mz_strongest" in temp_analyzer.analysedata 
+                    and len(temp_analyzer.analysedata["mz_strongest"]) > 0):
+                mz_masses, mz_intensities, _ = temp_analyzer.analysedata["mz_strongest"][0]
+                
+                # Make copies if they're numpy arrays
+                if isinstance(mz_masses, np.ndarray):
+                    mz_masses = mz_masses.copy()
+                if isinstance(mz_intensities, np.ndarray):
+                    mz_intensities = mz_intensities.copy()
+                    
                 mz_strongest = (mz_masses, mz_intensities)
 
-            # Get full MZ data
+            # Get full MZ data - handle different types
             if hasattr(temp_analyzer, "MSdata") and "mz_data" in temp_analyzer.MSdata:
-                all_mz_data = temp_analyzer.MSdata["mz_data"]
+                mz_data = temp_analyzer.MSdata["mz_data"]
+                
+                # Handle different types of mz_data
+                if isinstance(mz_data, dict):
+                    # If it's a dictionary, copy each item
+                    all_mz_data = {}
+                    for key, value in mz_data.items():
+                        if isinstance(value, np.ndarray):
+                            all_mz_data[key] = value.copy()
+                        else:
+                            all_mz_data[key] = value
+                elif isinstance(mz_data, list):
+                    # If it's a list, make a copy of the list
+                    all_mz_data = []
+                    for item in mz_data:
+                        if isinstance(item, np.ndarray):
+                            all_mz_data.append(item.copy())
+                        else:
+                            all_mz_data.append(item)
+                else:
+                    # For other types, just store directly
+                    all_mz_data = mz_data
 
         except Exception as e:
             self.logger.error(f"Error extracting MS data: {str(e)}")
+        
+        finally:
+            # Always clean up the analyzer object, even if an error occurs
+            if temp_analyzer is not None:
+                del temp_analyzer
+                import gc
+                gc.collect()
 
         return rt_max, intensity_max, eic_data, mz_strongest, all_mz_data
-
 
     def generate_compound_reports(self, samples=None):
         """Generate multi-compound reports for samples"""
@@ -1064,54 +1273,64 @@ class BulkAnalyser:
         )
         return report_paths
 
-    def run_complete_workflow(self):
+    def run_complete_workflow(self, batch_size=20):
         """
         Run the complete analysis workflow using parameters from config
-
+        
+        Args:
+            batch_size: Number of samples to process in each batch
+            
         Returns:
             Dictionary mapping sample IDs to their report paths
         """
         # Log initial memory usage
         monitor_memory("Workflow start", self.logger)
-
+        
         # Get parameters from config
         analysis_types = self.config["parameters"]["analysis_types"]
         modes = self.config["parameters"]["modes"]
         tolerance = self.config["parameters"]["tolerance"]
 
-        self.logger.info("Starting complete analysis workflow...")
+        self.logger.info("Starting complete analysis workflow with batch processing...")
         self.logger.info(f"Analysis types: {', '.join(analysis_types)}")
         self.logger.info(f"Modes: {', '.join(modes)}")
         self.logger.info(f"Default tolerance: {tolerance}")
+        self.logger.info(f"Batch size: {batch_size} samples")
 
-        # 1. Process all samples with the specified parameters
+        # 1. Process all samples with the specified parameters using batches
         self.process_samples(
-            analysis_types=analysis_types, modes=modes, tolerance=tolerance
+            analysis_types=analysis_types, 
+            modes=modes, 
+            tolerance=tolerance,
+            batch_size=batch_size
         )
         monitor_memory("After sample processing", self.logger)
 
-
+        # Rest of your workflow remains the same...
         # 2. Calculate response factors and conversions if enabled
-        if "conversion" in self.config and self.config["conversion"].get(
-            "enabled", True
-        ):
+        if "conversion" in self.config and self.config["conversion"].get("enabled", True):
             self.logger.info("Conversion analysis is enabled in config")
             self.logger.info("Calculating response factors for conversion analysis...")
 
             response_factors = self.calculate_response_factors()
             self.logger.info(f"Found {len(response_factors)} response factors")
+            monitor_memory("After response factor calculation", self.logger)
 
             if response_factors:
                 self.logger.info("Calculating conversions using response factors...")
                 conversion_results = self.calculate_conversions(response_factors)
+                monitor_memory("After conversion calculation", self.logger)
 
                 if not conversion_results.empty:
-                    self.logger.info(
-                        f"Found conversion results with {len(conversion_results)} rows"
-                    )
+                    self.logger.info(f"Found conversion results with {len(conversion_results)} rows")
                     self.logger.info("Generating conversion reports...")
                     report_paths = self.generate_conversion_reports(conversion_results)
                     self.logger.info(f"Generated {len(report_paths)} report files")
+                    
+                    # Clean up large dataframe
+                    del conversion_results
+                    gc.collect()
+                    monitor_memory("After conversion reports", self.logger)
                 else:
                     self.logger.warning("No conversion results found")
             else:
@@ -1121,17 +1340,22 @@ class BulkAnalyser:
 
         # 3. Generate visualizations
         self.generate_visualizations()
+        monitor_memory("After visualizations", self.logger)
 
         # 4. Extract sample data
         samples = self.extract_sample_data()
+        monitor_memory("After sample data extraction", self.logger)
 
         # 5. Generate compound reports
         report_paths = self.generate_compound_reports(samples)
+        monitor_memory("After compound reports", self.logger)
 
         self.logger.info("\nAnalysis and visualization complete!")
         self.logger.info(f"Reports saved to: {self.report_dir}")
         
+        # Final memory usage
         monitor_memory("Workflow complete", self.logger)
+
         return report_paths
 
     def get_compound_count(self, row, compound_type):
@@ -1161,77 +1385,6 @@ class BulkAnalyser:
 
         return max_index
 
-    def desalt_smiles(self, smiles: str, return_details: bool = False):
-        """Strips salts from a SMILES string by returning the largest molecular fragment."""
-        from rdkit import Chem
-        from rdkit.Chem import Descriptors
-
-        try:
-            # Skip empty or non-string inputs
-            if not isinstance(smiles, str) or not smiles.strip():
-                return (smiles, False, []) if return_details else smiles
-
-            # Quick check - if no periods, not a salt
-            if "." not in smiles:
-                return (smiles, False, []) if return_details else smiles
-
-            # Convert to RDKit molecule
-            mol = Chem.MolFromSmiles(smiles)
-            if mol is None:
-                self.logger.warning(f"Could not parse SMILES: {smiles}")
-                return (smiles, False, []) if return_details else smiles
-
-            # Calculate molecular weight of original compound
-            original_mw = Descriptors.MolWt(mol)
-            self.logger.info(
-                f"Original compound MW: {original_mw:.2f} Da, SMILES: {smiles}"
-            )
-
-            # Get fragments
-            fragments = Chem.GetMolFrags(mol, asMols=True)
-            if len(fragments) <= 1:
-                # No salts present
-                return (smiles, False, []) if return_details else smiles
-
-            # Find the largest fragment by molecular weight
-            fragment_weights = [Descriptors.MolWt(frag) for frag in fragments]
-
-            # Log all fragments
-            for i, (frag, weight) in enumerate(zip(fragments, fragment_weights)):
-                frag_smiles = Chem.MolToSmiles(frag)
-                self.logger.info(
-                    f"  Fragment {i+1}: MW {weight:.2f} Da, SMILES: {frag_smiles}"
-                )
-
-            largest_idx = fragment_weights.index(max(fragment_weights))
-            main_fragment = fragments[largest_idx]
-
-            # Convert to canonical SMILES
-            desalted_smiles = Chem.MolToSmiles(main_fragment)
-
-            self.logger.info(
-                f"Selected largest fragment: MW {fragment_weights[largest_idx]:.2f} Da"
-            )
-            self.logger.info(f"Removed salts from {smiles} -> {desalted_smiles}")
-
-            # Get salt fragments
-            salt_fragments = []
-            for i, frag in enumerate(fragments):
-                if i != largest_idx:
-                    salt_smiles = Chem.MolToSmiles(frag)
-                    salt_fragments.append(salt_smiles)
-
-            if salt_fragments:
-                self.logger.info(f"Salt fragments: {salt_fragments}")
-
-            if return_details:
-                return desalted_smiles, True, salt_fragments
-            else:
-                return desalted_smiles
-
-        except Exception as e:
-            self.logger.error(f"Error stripping salts from {smiles}: {str(e)}")
-            return (smiles, False, []) if return_details else smiles
 
     def calculate_response_factors(self):
         """
@@ -1301,8 +1454,11 @@ class BulkAnalyser:
                 if not isinstance(reactant_smiles, str) or not reactant_smiles.strip():
                     continue
 
-                # Desalt SMILES
-                reactant_smiles = self.desalt_smiles(reactant_smiles)
+                # Standardize the reactant SMILES
+                original_smiles = reactant_smiles
+                reactant_smiles = desalt_smiles(reactant_smiles)
+                reactant_inchi = standardise_compound(reactant_smiles, logger=self.logger)
+                self.logger.info(f"Standardized reference reactant: {original_smiles} → {reactant_inchi or 'FAILED'}")
 
                 # Get concentration (from CSV or default)
                 conc_col = f"reactant-{i}-concentration-uM"
@@ -1368,13 +1524,15 @@ class BulkAnalyser:
                                 is_signal / is_conc
                             )
 
-                            # Generate a unique key for this reactant/IS/mode combination
-                            rf_key = f"{reactant_name}_{is_name}_{mode}"
+                            # When creating the response factor key, use InChI instead of the reactant name:
+                           
+                            rf_key = f"{reactant_inchi}_{is_name}_{mode}"
 
                             # Store the response factor with metadata
                             response_factors[rf_key] = {
                                 "reactant_name": reactant_name,
                                 "reactant_smiles": reactant_smiles,
+                                "reactant_inchi": reactant_inchi,
                                 "is_name": is_name,
                                 "is_smiles": is_smiles,
                                 "mode": mode,
@@ -1473,6 +1631,18 @@ class BulkAnalyser:
         Calculate conversions for each sample with detailed product detection reporting
         """
         self.logger.info("Calculating conversions for samples...")
+        self.logger.info(f"Working with {len(response_factors)} response factors")
+        rf_keys = list(response_factors.keys())
+        if rf_keys:
+            self.logger.info(f"Example keys: {rf_keys[:min(5, len(rf_keys))]}")
+
+        # Show unique reactant InChIs from the response factors
+        unique_inchis = set()
+        for key in rf_keys:
+            rf_data = response_factors[key]
+            if "reactant_inchi" in rf_data and rf_data["reactant_inchi"]:
+                unique_inchis.add(rf_data["reactant_inchi"])
+        self.logger.info(f"Found {len(unique_inchis)} unique reactant structures in reference data")
 
         conversion_results = []
 
@@ -1566,9 +1736,22 @@ class BulkAnalyser:
                     if not isinstance(reactant_smiles, str) or not reactant_smiles.strip():
                         continue
 
-                    # Desalt SMILES
-                    reactant_smiles = self.desalt_smiles(reactant_smiles)
-                    
+                    # Standardise the SMILES
+                    original_smiles = reactant_smiles
+                    reactant_smiles = desalt_smiles(reactant_smiles)
+                    reactant_inchi = standardise_compound(reactant_smiles, logger=self.logger)
+                    self.logger.info(f"Standardized sample reactant: {original_smiles} → {reactant_inchi or 'FAILED'}")
+
+                    # When creating RF keys for lookup, use InChI:
+                    if reactant_inchi:
+                        # Use standardized InChI for lookup
+                        rf_key_pos = f"{reactant_inchi}_{is_name}_Positive"
+                        rf_key_neg = f"{reactant_inchi}_{is_name}_Negative"
+                    else:
+                        # Fallback to name-based lookup
+                        rf_key_pos = f"{reactant_name}_{is_name}_Positive"
+                        rf_key_neg = f"{reactant_name}_{is_name}_Negative"
+
                    # First check if ANY product was found in this sample (across all indices)
                     product_count = self.get_compound_count(sample_data, "product")
 
@@ -1589,10 +1772,21 @@ class BulkAnalyser:
                             float(sample_data[p_area_neg]) > 0):
                             self.logger.info(f"Product found in sample {sample_id} (product #{p_idx}, Negative mode)")
                             break  # Found at least one product
+
+                    # Add debugging for response factor lookup
+                    self.logger.info(f"Looking for RF keys: {rf_key_pos} or {rf_key_neg}")
+                    if rf_key_pos in response_factors:
+                        self.logger.info(f"Found response factor for {reactant_name} in Positive mode")
+                    elif rf_key_neg in response_factors:
+                        self.logger.info(f"Found response factor for {reactant_name} in Negative mode")
+                    else:
+                        self.logger.info(f"No response factors found for {reactant_name} with {is_name}")
                         
-                    # Check if we have response factors for this pair in different modes
-                    rf_key_pos = f"{reactant_name}_{is_name}_Positive"
-                    rf_key_neg = f"{reactant_name}_{is_name}_Negative"
+                        # Try to find any keys with this internal standard
+                        matching_keys = [k for k in response_factors.keys() if f"_{is_name}_" in k]
+                        if matching_keys:
+                            self.logger.info(f"Found {len(matching_keys)} other RF keys with this internal standard")
+                            self.logger.info(f"Examples: {matching_keys[:3]}")
 
                     for mode, rf_key in [("Positive", rf_key_pos), ("Negative", rf_key_neg)]:
                         # Skip modes that aren't defined for this internal standard
@@ -1677,7 +1871,7 @@ logger.info(f"Logging to file: {log_file}")
 
 # Initialize with config
 analyzer = BulkAnalyser(
-    "/Users/bvh64415/myrepos/mscheck/tests/testdata/bulk-test/mscheck_config_no_conversion.yaml"
+    "/Users/bvh64415/Library/CloudStorage/OneDrive-DiamondLightSourceLtd/FFF-projects/DENV-NS2B3-NS3(MedChemica)/CAR/flavi-t3c-i2a/QC/flavi-t3c-i2a xp00-xp02 with IS/open_source_with_uv/mscheck/mscheck_config_flavi_lp02.yaml"
 )
 
 # # Run specific steps as needed
