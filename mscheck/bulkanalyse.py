@@ -962,6 +962,44 @@ class BulkAnalyser:
         # Make a copy to avoid modifying the original
         working_df = conversion_df.copy()
         
+        # Add UV area data to conversion summary
+        self.logger.info("Adding UV area data to conversion summary...")
+
+        # Extract UV area data from batch_data
+        uv_area_columns = [col for col in self.batch_data.columns if '-UV-max-area' in col]
+        if uv_area_columns:
+            self.logger.info(f"Found {len(uv_area_columns)} UV area columns to include in reports")
+            
+            # Create mapping between sample IDs in working_df and indices in batch_data
+            sample_id_to_index = {}
+            for idx, row in self.batch_data.iterrows():
+                sample_id = row.get("sample-ID", f"sample_{idx}")
+                sample_id_to_index[sample_id] = idx
+            
+            # For each sample in conversion results, add UV area data
+            for idx, row in working_df.iterrows():
+                sample_id = row["sample_id"]
+                if sample_id in sample_id_to_index:
+                    batch_idx = sample_id_to_index[sample_id]
+                    
+                    # Add each UV area column with a cleaner name
+                    for col in uv_area_columns:
+                        # Extract compound type and number from column name
+                        # Example: "reactant-1-UV-max-area" -> "reactant-1-UVArea"
+                        parts = col.split('-UV-')
+                        compound_id = parts[0]  # e.g., "reactant-1"
+                        
+                        # Create new column name
+                        new_col = f"{compound_id}-UVArea"
+                        
+                        # Get the UV area value if it exists
+                        if not pd.isna(self.batch_data.loc[batch_idx, col]):
+                            working_df.loc[idx, new_col] = self.batch_data.loc[batch_idx, col]
+                            
+            self.logger.info("UV area data added to conversion summary")
+        else:
+            self.logger.info("No UV area data found in batch results")
+
         # Find input concentrations if available by looking at reactant configuration
         input_concentrations = {}
         if "conversion" in self.config and "reactants" in self.config["conversion"]:
@@ -1031,7 +1069,26 @@ class BulkAnalyser:
                 "max_concentration",
                 "measurement_count"
             ]
-            
+
+            # Add UV area columns if available
+            if uv_area_columns:
+                # For each sample in sample_summary, add average UV areas
+                for idx, row in sample_summary.iterrows():
+                    sample_id = row["sample_id"]
+                    if sample_id in sample_id_to_index:
+                        batch_idx = sample_id_to_index[sample_id]
+                        
+                        # Add each UV area column with a cleaner name
+                        for col in uv_area_columns:
+                            parts = col.split('-UV-')
+                            compound_id = parts[0]  # e.g., "reactant-1"
+                            new_col = f"{compound_id}-UVArea"
+                            
+                            if not pd.isna(self.batch_data.loc[batch_idx, col]):
+                                sample_summary.loc[idx, new_col] = self.batch_data.loc[batch_idx, col]
+                
+                self.logger.info("UV area data added to sample summary")  
+
             sample_path = os.path.join(report_dir, f"sample_summary_{timestamp}.csv")
             sample_summary.to_csv(sample_path, index=False)
             report_paths["sample_summary"] = sample_path
@@ -1796,13 +1853,13 @@ logger = get_logger("MSCheck")  # Use get_logger for consistency with your modul
 logger.info(f"Logging to file: {log_file}")
 
 # Initialize with config
-analyzer = BulkAnalyser(
-    "/Users/bvh64415/myrepos/mscheck/tests/testdata/bulk-test/mscheck_config_no_conversion.yaml"
-)
-
 # analyzer = BulkAnalyser(
-#     "/Users/bvh64415/Library/CloudStorage/OneDrive-DiamondLightSourceLtd/FFF-projects/DENV-NS2B3-NS3(MedChemica)/CAR/flavi-t3c-i2a/QC/flavi-t3c-i2a xp00-xp02 with IS/open_source_with_uv/mscheck/mscheck_config_flavi_lp02.yaml"
+#     "/Users/bvh64415/myrepos/mscheck/tests/testdata/bulk-test/mscheck_config_no_conversion.yaml"
 # )
+
+analyzer = BulkAnalyser(
+    "/Users/bvh64415/Library/CloudStorage/OneDrive-DiamondLightSourceLtd/FFF-projects/DENV-NS2B3-NS3(MedChemica)/CAR/flavi-t3c-i2a/QC/flavi-t3c-i2a xp00-xp02 with IS/open_source_with_uv/mscheck/mscheck_config_flavi_lp01.yaml"
+)
 
 
 # # Run specific steps as needed
