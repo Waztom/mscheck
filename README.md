@@ -46,10 +46,10 @@ a format with the binary decoded.
 4. In your favourite IDE or Jupyter notebook - a basic example of using MSCheck is provided below:<br>
 
 ```
-from mscheck.analyse import AnalyseSpectrum
+from mscheck.analyseMS import AnalyseMS
 
 # Create MS scptrum object and find peaks
-test = AnalyseSpectrum("<path to .mzML file>", mode="Positive")
+test = AnalyseMS("<path to .mzML file>", mode="Positive")
 
 # Set SMILES of target to search for
 target_SMILES = "CCOC(=O)N1CCN(C(=O)N2CCN(C(=O)c3ccco3)CC2)CC1"

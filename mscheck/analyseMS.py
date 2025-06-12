@@ -6,10 +6,10 @@ import numpy as np
 import logging
 from utils import get_smiles, get_mol, get_MW, get_path_leaf
 from report import MSReport
-from spectrum import MassSpectrum
+from mzspectrum import MassSpectrum
 
 
-class AnalyseSpectrum(MassSpectrum):
+class AnalyseMS(MassSpectrum):
     """
     Analyses the MassSpectrum class object
     """
@@ -23,7 +23,7 @@ class AnalyseSpectrum(MassSpectrum):
         """
         super().__init__(mzMLfilepath, mode)
         self.MSpeakdata = self._get_ms_peak_data()
-        self.logger = logging.getLogger("AnalyseSpectrum")
+        self.logger = logging.getLogger("AnalyseMS")
 
     def _get_ms_peak_data(self) -> dict:
         """
@@ -372,6 +372,10 @@ class AnalyseSpectrum(MassSpectrum):
         )
         self.logger.info(f"Analysis complete. Matched ions: {matched_ions_str}")
 
+        # Find RT values for maximum TIC signals
+        if RT_matched and TIC_matched:
+            self.max_RT_ion_match()
+
         return self.analysedata
 
     def get_strongest_mz_pattern(self, mz_values: list) -> largest_mz_pattern:
@@ -450,6 +454,69 @@ class AnalyseSpectrum(MassSpectrum):
             self.logger.warning("No dominant EIC curve found")
             self.analysedata["EIC_area"] = 0.0
             return 0.0
+
+    def max_RT_ion_match(self) -> dict:
+        """
+        Find retention times corresponding to maximum TIC signals for each matched ion.
+        
+        Returns:
+            dict: Dictionary containing RT values of maximum intensity for each matched ion,
+                with the overall maximum RT and its corresponding ion
+        """
+        self.logger.info("Finding RT values for maximum TIC signals")
+        
+        # Check if we have RT and TIC data from previous analysis
+        if not self.analysedata or "RT" not in self.analysedata or not self.analysedata["RT"]:
+            self.logger.warning("No RT data available from analysis")
+            return {
+                "rt_values": [],
+                "max_rt": None,
+                "max_ion": None
+            }
+        
+        rt_at_max = []
+        max_intensities = []
+        ions = []
+        
+        # Process each RT array and corresponding TIC array
+        for i, (rt_array, tic_array) in enumerate(zip(self.analysedata["RT"], self.analysedata["TIC"])):
+            if len(rt_array) > 0 and len(tic_array) > 0:
+                # Find index of maximum TIC value
+                max_idx = np.argmax(tic_array)
+                # Get corresponding RT value
+                rt_max = rt_array[max_idx]
+                # Get intensity at maximum
+                intensity_max = tic_array[max_idx]
+                # Get ion information if available
+                ion = self.analysedata["ions"][i] if i < len(self.analysedata["ions"]) else None
+                
+                rt_at_max.append(rt_max)
+                max_intensities.append(intensity_max)
+                ions.append(ion)
+                
+                self.logger.debug(f"Ion match {i+1}: RT at max TIC = {rt_max:.2f} min, Max TIC = {intensity_max:.2f}")
+        
+        # Find the overall maximum
+        overall_max_rt = None
+        overall_max_ion = None
+        
+        if max_intensities:
+            overall_max_idx = np.argmax(max_intensities)
+            overall_max_rt = rt_at_max[overall_max_idx]
+            overall_max_ion = ions[overall_max_idx]
+            
+            self.logger.info(f"Overall maximum TIC at RT {overall_max_rt:.2f} min for ion {overall_max_ion}")
+        
+        # Store results in analysedata for easy access
+        self.analysedata["rt_at_max_tic"] = rt_at_max
+        self.analysedata["max_rt"] = overall_max_rt
+        self.analysedata["max_ion"] = overall_max_ion
+        
+        return {
+            "rt_values": rt_at_max,
+            "max_rt": overall_max_rt,
+            "max_ion": overall_max_ion
+        }
 
     def create_report(self, folder: str = "reports", compound_name: str = None) -> str:
         """Create a report for the analyzed spectrum"""
