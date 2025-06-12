@@ -637,27 +637,7 @@ class BulkAnalyser:
 
         ion_str = ion_str.strip()
 
-        # Handle special case for hydrogen
-        if ion_str == "H":
-            return ["[H]"]
-        elif not ion_str:
-            return []
-
-        # Handle the case where the string starts with the ion without brackets
-        if ion_str.startswith("[") and "]" in ion_str:
-            # Already formatted ions
-            return [s.strip() for s in ion_str.split(",") if s.strip()]
-        else:
-            # Need to split and add brackets if needed
-            ions = []
-            for ion in ion_str.split(","):
-                ion = ion.strip()
-                if ion:
-                    # Add brackets if needed
-                    if not (ion.startswith("[") and ion.endswith("]")):
-                        ion = f"[{ion}]"
-                    ions.append(ion)
-            return ions
+        return [s.strip() for s in ion_str.split(",") if s.strip()]
 
     def save_results(self, output_path: str) -> bool:
         """
@@ -1140,123 +1120,159 @@ class BulkAnalyser:
 
     def generate_conversion_reports(self, conversion_df):
         """
-        Generate reports and visualizations for conversion results
-
+        Generate reports and visualizations for conversion results with improved statistics
+        
         Args:
             conversion_df: DataFrame with conversion results
-
+            
         Returns:
             Dictionary of report paths
         """
-        self.logger.info("Generating conversion reports...")
-
-        # Check if we have results
-        if conversion_df is None or len(conversion_df) == 0:
+        self.logger.info("Generating conversion reports with improved statistics...")
+        
+        if conversion_df is None or conversion_df.empty:
             self.logger.warning("No conversion data available for reports")
             return {}
-
-        # Get report settings
-        report_dir = os.path.join(self.report_dir, "conversion_reports")
-        self.logger.info(f"Creating conversion reports directory: {report_dir}")
-
+            
         # Create report directory
+        report_dir = os.path.join(self.report_dir, "conversion_reports")
         os.makedirs(report_dir, exist_ok=True)
-
-        # Create unique timestamp for this report set
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         report_paths = {}
+        
+        # Make a copy to avoid modifying the original
+        working_df = conversion_df.copy()
+        
+        # Find input concentrations if available by looking at reactant configuration
+        input_concentrations = {}
+        if "conversion" in self.config and "reactants" in self.config["conversion"]:
+            for reactant in self.config["conversion"]["reactants"]:
+                if "name" in reactant and "concentration_uM" in reactant:
+                    input_concentrations[reactant["name"]] = reactant["concentration_uM"]
+        
+        # Filter out unrealistic values (concentration ≥ input concentration)
+        filtered_records = 0
+        rows_to_drop = []
 
+        for idx, row in working_df.iterrows():  # Iterate over working_df directly
+            reactant = row["reactant_name"]
+            
+            # Skip rows with NaN concentration
+            if pd.isna(row["concentration_reactant_uM"]):
+                continue
+                
+            concentration = float(row["concentration_reactant_uM"])
+            
+            # If we know the input concentration, filter out if concentration is higher
+            if reactant in input_concentrations:
+                input_conc = input_concentrations[reactant]
+                if concentration >= input_conc:
+                    rows_to_drop.append(idx)
+                    filtered_records += 1
+                    
+        # Drop all identified rows at once
+        if rows_to_drop:
+            working_df = working_df.drop(rows_to_drop)
+            
+        if filtered_records > 0:
+            self.logger.info(f"Filtered out {filtered_records} records with unrealistic concentrations")
+        
         # ===== 1. Generate detailed CSV summary =====
         summary_path = os.path.join(report_dir, f"conversion_summary_{timestamp}.csv")
-        conversion_df.to_csv(summary_path, index=False)
+        working_df.to_csv(summary_path, index=False)
         report_paths["detailed_summary"] = summary_path
         self.logger.info(f"Saved detailed conversion summary to: {summary_path}")
-
+        
+        # Define custom aggregation function to handle single-value case
+        def calc_concentration(x):
+            if len(x) == 1:  # Single value
+                return x.iloc[0]
+            else:  # Multiple values
+                return x.mean()
+        
         # ===== 2. Generate summary by sample =====
         try:
-            # Group by sample and calculate statistics
-            sample_summary = (
-                conversion_df.groupby("sample_id")
-                .agg(
-                    {
-                        "concentration_reactant_uM": [
-                            "mean",
-                            "std",
-                            "min",
-                            "max",
-                            "count",
-                        ]
-                    }
-                )
-                .reset_index()
-            )
-
+            # Group by sample and calculate statistics with improved method
+            sample_summary = working_df.groupby("sample_id").agg({
+                "concentration_reactant_uM": [
+                    calc_concentration,  # Custom function 
+                    "std", 
+                    "min", 
+                    "max",
+                    "count"
+                ]
+            }).reset_index()
+            
             # Flatten column names
             sample_summary.columns = [
-                "sample_id",
-                "mean_concentration",
-                "std_concentration",
-                "min_concentration",
+                "sample_id", 
+                "calculated_concentration",  # New name for our custom function
+                "std_concentration", 
+                "min_concentration", 
                 "max_concentration",
-                "measurement_count",
+                "measurement_count"
             ]
-
+            
             sample_path = os.path.join(report_dir, f"sample_summary_{timestamp}.csv")
             sample_summary.to_csv(sample_path, index=False)
             report_paths["sample_summary"] = sample_path
             self.logger.info(f"Saved sample conversion summary to: {sample_path}")
         except Exception as e:
             self.logger.error(f"Error generating sample summary: {str(e)}")
-
+        
         # ===== 3. Generate summary by reactant =====
         try:
-            # Group by reactant and calculate statistics
-            reactant_summary = (
-                conversion_df.groupby("reactant_name")
-                .agg({"concentration_reactant_uM": ["mean", "std", "min", "max", "count"]})
-                .reset_index()
-            )
-
+            # Group by reactant with improved method
+            reactant_summary = working_df.groupby("reactant_name").agg({
+                "concentration_reactant_uM": [
+                    calc_concentration,  # Custom function
+                    "std", 
+                    "min", 
+                    "max", 
+                    "count"
+                ]
+            }).reset_index()
+            
             # Flatten column names
             reactant_summary.columns = [
                 "reactant_name",
-                "mean_concentration",
-                "std_concentration",
-                "min_concentration",
+                "calculated_concentration",  # New name for our custom function
+                "std_concentration", 
+                "min_concentration", 
                 "max_concentration",
-                "measurement_count",
+                "measurement_count"
             ]
-
-            reactant_path = os.path.join(
-                report_dir, f"reactant_summary_{timestamp}.csv"
-            )
+            
+            reactant_path = os.path.join(report_dir, f"reactant_summary_{timestamp}.csv")
             reactant_summary.to_csv(reactant_path, index=False)
             report_paths["reactant_summary"] = reactant_path
             self.logger.info(f"Saved reactant conversion summary to: {reactant_path}")
         except Exception as e:
             self.logger.error(f"Error generating reactant summary: {str(e)}")
-            
-        # ===== 4. NEW: Generate summary by internal standard and reactant =====
+        
+        # ===== 4. Generate summary by internal standard and reactant =====
         try:
-            # Group by reactant and internal standard to compare different standards
-            is_summary = (
-                conversion_df.groupby(["reactant_name", "internal_standard", "mode"])
-                .agg({
-                    "concentration_reactant_uM": ["mean", "std", "min", "max", "count"],
-                    "response_factor": ["mean"]
-                })
-                .reset_index()
-            )
+            # Group by reactant and internal standard with improved method
+            is_summary = working_df.groupby(["reactant_name", "internal_standard", "mode"]).agg({
+                "concentration_reactant_uM": [
+                    calc_concentration,  # Custom function
+                    "std", 
+                    "min", 
+                    "max", 
+                    "count"
+                ],
+                "response_factor": ["mean"]
+            }).reset_index()
             
             # Flatten column names
             is_summary.columns = [
                 "reactant_name", 
                 "internal_standard", 
                 "mode",
-                "mean_concentration", 
+                "calculated_concentration",  # New name for our custom function
                 "std_concentration", 
                 "min_concentration", 
-                "max_concentration", 
+                "max_concentration",
                 "measurement_count",
                 "mean_response_factor"
             ]
@@ -1267,10 +1283,7 @@ class BulkAnalyser:
             self.logger.info(f"Saved internal standard comparison to: {is_path}")
         except Exception as e:
             self.logger.error(f"Error generating internal standard comparison: {str(e)}")
-
-        self.logger.info(
-            f"Generated {len(report_paths)} conversion reports in {report_dir}"
-        )
+    
         return report_paths
 
     def run_complete_workflow(self, batch_size=20):
@@ -1306,7 +1319,6 @@ class BulkAnalyser:
         )
         monitor_memory("After sample processing", self.logger)
 
-        # Rest of your workflow remains the same...
         # 2. Calculate response factors and conversions if enabled
         if "conversion" in self.config and self.config["conversion"].get("enabled", True):
             self.logger.info("Conversion analysis is enabled in config")
@@ -1628,235 +1640,329 @@ class BulkAnalyser:
 
     def calculate_conversions(self, response_factors):
         """
-        Calculate conversions for each sample with detailed product detection reporting
+        Calculate conversions for each sample with comprehensive reporting of all samples
+        
+        Args:
+            response_factors: Dictionary of response factors from calculate_response_factors
+            
+        Returns:
+            DataFrame with conversion results for all samples, including status information
         """
-        self.logger.info("Calculating conversions for samples...")
+        self.logger.info("Calculating conversions for samples with comprehensive reporting...")
         self.logger.info(f"Working with {len(response_factors)} response factors")
-        rf_keys = list(response_factors.keys())
-        if rf_keys:
-            self.logger.info(f"Example keys: {rf_keys[:min(5, len(rf_keys))]}")
-
-        # Show unique reactant InChIs from the response factors
-        unique_inchis = set()
-        for key in rf_keys:
-            rf_data = response_factors[key]
-            if "reactant_inchi" in rf_data and rf_data["reactant_inchi"]:
-                unique_inchis.add(rf_data["reactant_inchi"])
-        self.logger.info(f"Found {len(unique_inchis)} unique reactant structures in reference data")
-
+        
+        # Prepare results list that will include ALL samples
         conversion_results = []
-
-        # Process each sample first
+        
+        # Process each sample in the batch data
         for idx, sample_data in self.batch_data.iterrows():
             sample_id = sample_data.get("sample-ID", f"sample_{idx}")
-            self.logger.info(f"Processing conversion for sample: {sample_id}")
-
-            # Get mzML file for this sample
+            self.logger.info(f"Processing sample: {sample_id}")
+            
+            # Get mzML file path - first potential failure point
             mzML_filename = sample_data.get("mzML-filename")
             mzML_filepath = self.find_mzml_file(mzML_filename)
+            
             if not mzML_filepath:
-                self.logger.warning(f"Could not find mzML file for sample {sample_id}")
+                # Add entry for missing mzML file
+                conversion_results.append({
+                    "sample_id": sample_id,
+                    "reactant_name": "UNKNOWN",
+                    "reactant_idx": 0,
+                    "internal_standard": "NONE",
+                    "mode": "N/A",
+                    "reactant_signal": 0,
+                    "is_signal": 0,
+                    "response_factor": 0,
+                    "is_concentration_uM": 0,
+                    "concentration_reactant_uM": float('nan'),
+                    "products_detected": "N/A",
+                    "product_count": 0,
+                    "status": "Missing mzML file"
+                })
+                self.logger.warning(f"Sample {sample_id}: mzML file not found")
                 continue
-
-            # Find which internal standards are present in this sample
+                
+            # Find internal standards in this sample - second potential failure point
             present_standards = {}
             for j in range(1, 10):  # Check up to 10 internal standards
                 is_col = f"internal-std-{j}"
                 if is_col in sample_data.index and not pd.isna(sample_data[is_col]):
                     is_name = sample_data[is_col]
                     present_standards[is_name] = j
-                    self.logger.info(f"Found internal standard: {is_name} in sample {sample_id}")
-
+        
             if not present_standards:
-                self.logger.warning(f"No internal standards found in sample {sample_id}")
+                # Add entry for sample without internal standards
+                conversion_results.append({
+                    "sample_id": sample_id,
+                    "reactant_name": "UNKNOWN",
+                    "reactant_idx": 0,
+                    "internal_standard": "NONE",
+                    "mode": "N/A",
+                    "reactant_signal": 0,
+                    "is_signal": 0,
+                    "response_factor": 0,
+                    "is_concentration_uM": 0,
+                    "concentration_reactant_uM": float('nan'),
+                    "products_detected": "N/A",
+                    "product_count": 0,
+                    "status": "No internal standards found"
+                })
+                self.logger.warning(f"Sample {sample_id}: No internal standards found")
                 continue
-
-            # Find available reactants in this sample
+            
+            # Find reactants in this sample - third potential failure point
             reactant_count = self.get_compound_count(sample_data, "reactant")
             
-            # NEW: Get detailed product detection information
-            product_count = self.get_compound_count(sample_data, "product")
-            products_found = []
+            if reactant_count == 0:
+                # Add entry for sample without reactants
+                for is_name in present_standards:
+                    conversion_results.append({
+                        "sample_id": sample_id,
+                        "reactant_name": "NONE",
+                        "reactant_idx": 0,
+                        "internal_standard": is_name,
+                        "mode": "N/A",
+                        "reactant_signal": 0,
+                        "is_signal": 0,
+                        "response_factor": 0,
+                        "is_concentration_uM": 0,
+                        "concentration_reactant_uM": float('nan'),
+                        "products_detected": "N/A",
+                        "product_count": 0,
+                        "status": "No reactants found"
+                    })
+                self.logger.warning(f"Sample {sample_id}: No reactants found")
+                continue
             
-            # Check each product in each mode and collect ALL products found
+            # Get product detection information
+            products_found = []
+            product_count = self.get_compound_count(sample_data, "product")
+            
+            # Find all detected products across all modes
             for p_idx in range(1, product_count + 1):
-                # Check in Positive mode
+                # Check Positive mode
                 p_area_pos = f"product-{p_idx}-EIC-area-Positive"
                 if (p_area_pos in sample_data.index and 
                     not pd.isna(sample_data[p_area_pos]) and 
                     float(sample_data[p_area_pos]) > 0):
                     products_found.append(f"Product-{p_idx}-Positive")
-                    self.logger.info(f"Product {p_idx} found in Positive mode for sample {sample_id}")
                     
-                # Check in Negative mode
+                # Check Negative mode
                 p_area_neg = f"product-{p_idx}-EIC-area-Negative"
                 if (p_area_neg in sample_data.index and 
                     not pd.isna(sample_data[p_area_neg]) and 
                     float(sample_data[p_area_neg]) > 0):
                     products_found.append(f"Product-{p_idx}-Negative")
-                    self.logger.info(f"Product {p_idx} found in Negative mode for sample {sample_id}")
-            
-            # Create a comma-separated list of found products
+        
+            # Format product information
             products_found_str = ", ".join(products_found) if products_found else "No products detected"
-           
             
-            # Process each reactant/internal standard combination
+            # Process each standard/reactant combination
             for is_name, is_idx in present_standards.items():
-                # Get internal standard info from config
+                # Lookup this IS in the configuration
                 is_config = None
-                is_custom_mw = None
-                is_smiles = None
-                is_modes = None
-                
                 for is_info in self.config["conversion"]["internal_standards"].get("standards", []):
                     if is_info["name"] == is_name:
                         is_config = is_info
-                        is_custom_mw = is_info.get("molecular_weight", None)
-                        is_smiles = is_info["smiles"]
-                        is_conc = is_info.get("concentration_uM",
-                            self.config["conversion"]["internal_standards"].get("default_concentration_uM", 100.0))
-                        is_modes = is_info.get("modes", ["Positive", "Negative"])
                         break
-
+            
                 if is_config is None:
-                    self.logger.warning(f"Internal standard {is_name} not found in configuration")
+                    # Add entry for IS not in configuration
+                    for i in range(1, reactant_count + 1):
+                        reactant_col = f"reactant-{i}"
+                        reactant_name = sample_data.get(reactant_col, f"Reactant-{i}")
+                        conversion_results.append({
+                            "sample_id": sample_id,
+                            "reactant_name": reactant_name,
+                            "reactant_idx": i,
+                            "internal_standard": is_name,
+                            "mode": "N/A",
+                            "reactant_signal": 0,
+                            "is_signal": 0,
+                            "response_factor": 0,
+                            "is_concentration_uM": 0,
+                            "concentration_reactant_uM": float('nan'),
+                            "products_detected": products_found_str,
+                            "product_count": len(products_found),
+                            "status": "Internal standard not in configuration"
+                        })
+                    self.logger.warning(f"Sample {sample_id}: IS {is_name} not found in configuration")
                     continue
                 
-                if is_smiles is None:
-                    self.logger.warning(f"No SMILES found for internal standard {is_name}")
-                    continue
-
-                # Process each reactant in this sample
+                # Get IS details
+                is_smiles = is_config["smiles"]
+                is_modes = is_config.get("modes", ["Positive", "Negative"])
+                is_conc = is_config.get("concentration_uM", 
+                    self.config["conversion"]["internal_standards"].get("default_concentration_uM", 100.0))
+                is_custom_mw = is_config.get("molecular_weight", None)
+                
+                # Process each reactant
                 for i in range(1, reactant_count + 1):
                     reactant_col = f"reactant-{i}"
                     reactant_name = sample_data.get(reactant_col, f"Reactant-{i}")
                     reactant_smiles = sample_data.get(reactant_col)
-
-                    # Skip if no SMILES
+                    
+                    # Check for valid SMILES
                     if not isinstance(reactant_smiles, str) or not reactant_smiles.strip():
+                        conversion_results.append({
+                            "sample_id": sample_id,
+                            "reactant_name": reactant_name,
+                            "reactant_idx": i,
+                            "internal_standard": is_name,
+                            "mode": "N/A",
+                            "reactant_signal": 0,
+                            "is_signal": 0,
+                            "response_factor": 0,
+                            "is_concentration_uM": is_conc,
+                            "concentration_reactant_uM": float('nan'),
+                            "products_detected": products_found_str,
+                            "product_count": len(products_found),
+                            "status": "Invalid or missing SMILES"
+                        })
+                        self.logger.warning(f"Sample {sample_id}, Reactant {i}: Invalid or missing SMILES")
                         continue
-
-                    # Standardise the SMILES
-                    original_smiles = reactant_smiles
+                    
+                    # Standardize SMILES for matching
                     reactant_smiles = desalt_smiles(reactant_smiles)
                     reactant_inchi = standardise_compound(reactant_smiles, logger=self.logger)
-                    self.logger.info(f"Standardized sample reactant: {original_smiles} → {reactant_inchi or 'FAILED'}")
-
-                    # When creating RF keys for lookup, use InChI:
+                    
+                    # Create RF keys - use InChI if available
                     if reactant_inchi:
-                        # Use standardized InChI for lookup
                         rf_key_pos = f"{reactant_inchi}_{is_name}_Positive"
                         rf_key_neg = f"{reactant_inchi}_{is_name}_Negative"
                     else:
-                        # Fallback to name-based lookup
                         rf_key_pos = f"{reactant_name}_{is_name}_Positive"
                         rf_key_neg = f"{reactant_name}_{is_name}_Negative"
-
-                   # First check if ANY product was found in this sample (across all indices)
-                    product_count = self.get_compound_count(sample_data, "product")
-
-                    # Check all products in all modes
-                    for p_idx in range(1, product_count + 1):
-                        # Check in Positive mode
-                        p_area_pos = f"product-{p_idx}-EIC-area-Positive"
-                        if (p_area_pos in sample_data.index and 
-                            not pd.isna(sample_data[p_area_pos]) and 
-                            float(sample_data[p_area_pos]) > 0):
-                            self.logger.info(f"Product found in sample {sample_id} (product #{p_idx}, Positive mode)")
-                            break  # Found at least one product
-                            
-                        # Check in Negative mode
-                        p_area_neg = f"product-{p_idx}-EIC-area-Negative"
-                        if (p_area_neg in sample_data.index and 
-                            not pd.isna(sample_data[p_area_neg]) and 
-                            float(sample_data[p_area_neg]) > 0):
-                            self.logger.info(f"Product found in sample {sample_id} (product #{p_idx}, Negative mode)")
-                            break  # Found at least one product
-
-                    # Add debugging for response factor lookup
-                    self.logger.info(f"Looking for RF keys: {rf_key_pos} or {rf_key_neg}")
-                    if rf_key_pos in response_factors:
-                        self.logger.info(f"Found response factor for {reactant_name} in Positive mode")
-                    elif rf_key_neg in response_factors:
-                        self.logger.info(f"Found response factor for {reactant_name} in Negative mode")
-                    else:
-                        self.logger.info(f"No response factors found for {reactant_name} with {is_name}")
+                    
+                    # Check for response factors in each mode
+                    rf_match_pos = rf_key_pos in response_factors
+                    rf_match_neg = rf_key_neg in response_factors
+                    
+                    if not (rf_match_pos or rf_match_neg):
+                        # Add entry for missing response factor
+                        conversion_results.append({
+                            "sample_id": sample_id,
+                            "reactant_name": reactant_name,
+                            "reactant_idx": i,
+                            "internal_standard": is_name,
+                            "mode": "BOTH",
+                            "reactant_signal": 0,
+                            "is_signal": 0,
+                            "response_factor": 0,
+                            "is_concentration_uM": is_conc,
+                            "concentration_reactant_uM": float('nan'),
+                            "products_detected": products_found_str,
+                            "product_count": len(products_found),
+                            "status": "No matching response factor"
+                        })
+                        self.logger.warning(f"Sample {sample_id}, Reactant {reactant_name}: No matching response factor with {is_name}")
+                        continue
+                    
+                    # Try each mode with a matching RF
+                    for mode, rf_key, rf_match in [
+                        ("Positive", rf_key_pos, rf_match_pos),
+                        ("Negative", rf_key_neg, rf_match_neg)
+                    ]:
+                        if not rf_match or mode not in is_modes:
+                            continue
                         
-                        # Try to find any keys with this internal standard
-                        matching_keys = [k for k in response_factors.keys() if f"_{is_name}_" in k]
-                        if matching_keys:
-                            self.logger.info(f"Found {len(matching_keys)} other RF keys with this internal standard")
-                            self.logger.info(f"Examples: {matching_keys[:3]}")
-
-                    for mode, rf_key in [("Positive", rf_key_pos), ("Negative", rf_key_neg)]:
-                        # Skip modes that aren't defined for this internal standard
-                        if mode not in is_modes:
-                            self.logger.debug(f"Skipping {mode} mode for {is_name} - not in allowed modes: {is_modes}")
-                            continue
-                            
-                        if rf_key not in response_factors:
-                            continue
-
-                        # Extract internal standard signal in the appropriate mode
+                        # Extract IS signal
                         is_signal = self._extract_compound_signal(
                             mzML_filepath, is_smiles, mode, custom_mw=is_custom_mw
                         )
                         
-                        if is_signal == 0:
-                            self.logger.warning(f"No signal detected for internal standard {is_name} in {mode} mode for sample {sample_id}")
-                            continue
-
-                        # Get response factor data
-                        rf_data = response_factors[rf_key]
-                        response_factor = rf_data["response_factor"]
-
-                        # Get reactant signal (if exists in batch data)
-                        signal_column = f"{reactant_col}-EIC-area-{mode}"
-                        if signal_column in sample_data.index and not pd.isna(sample_data[signal_column]):
-                            reactant_signal = sample_data[signal_column]
-
-                            # Calculate conversion
-                            concentration_reactant = ((reactant_signal / is_signal) * is_conc) / response_factor if is_signal > 0 and response_factor > 0 else 0
-
-                            # Store result with ENHANCED product detection info
+                        if is_signal <= 0:
+                            # Add entry for no IS signal
                             conversion_results.append({
                                 "sample_id": sample_id,
                                 "reactant_name": reactant_name,
                                 "reactant_idx": i,
                                 "internal_standard": is_name,
                                 "mode": mode,
-                                "reactant_signal": reactant_signal,
-                                "is_signal": is_signal,
-                                "response_factor": response_factor,
+                                "reactant_signal": 0,
+                                "is_signal": 0,
+                                "response_factor": response_factors[rf_key]["response_factor"],
                                 "is_concentration_uM": is_conc,
-                                "concentration_reactant_uM": concentration_reactant,
-                                "products_detected": products_found_str,  # Add the detailed list
-                                "product_count": len(products_found)  # Add count of products found
+                                "concentration_reactant_uM": float('nan'),
+                                "products_detected": products_found_str,
+                                "product_count": len(products_found),
+                                "status": "No internal standard signal detected"
                             })
-
-                            # Also add to batch data
-                            col_name = f"reactant-{i}-concentration-{mode}-{is_name}"
-                            self.batch_data.loc[idx, col_name] = concentration_reactant
-
-                            self.logger.info(f"Calculated concentration for {reactant_name} using {is_name} in {mode} mode: {concentration_reactant:.2f} uM")
-
-        # Create DataFrame from results
+                            self.logger.warning(f"Sample {sample_id}, Mode {mode}: No signal for IS {is_name}")
+                            continue
+                        
+                        # Get reactant signal
+                        signal_column = f"{reactant_col}-EIC-area-{mode}"
+                        
+                        if signal_column not in sample_data.index or pd.isna(sample_data[signal_column]):
+                            # Add entry for missing reactant signal
+                            conversion_results.append({
+                                "sample_id": sample_id,
+                                "reactant_name": reactant_name,
+                                "reactant_idx": i,
+                                "internal_standard": is_name,
+                                "mode": mode,
+                                "reactant_signal": 0,
+                                "is_signal": is_signal,
+                                "response_factor": response_factors[rf_key]["response_factor"],
+                                "is_concentration_uM": is_conc,
+                                "concentration_reactant_uM": float('nan'),
+                                "products_detected": products_found_str,
+                                "product_count": len(products_found),
+                                "status": "No reactant signal detected"
+                            })
+                            self.logger.warning(f"Sample {sample_id}, Mode {mode}: No signal for reactant {reactant_name}")
+                            continue
+                        
+                        # We have all needed data - calculate conversion
+                        reactant_signal = float(sample_data[signal_column])
+                        response_factor = response_factors[rf_key]["response_factor"]
+                        
+                        # Calculate concentration
+                        concentration_reactant = ((reactant_signal / is_signal) * is_conc) / response_factor
+                        
+                        # Add successful result
+                        conversion_results.append({
+                            "sample_id": sample_id,
+                            "reactant_name": reactant_name,
+                            "reactant_idx": i,
+                            "internal_standard": is_name,
+                            "mode": mode,
+                            "reactant_signal": reactant_signal,
+                            "is_signal": is_signal,
+                            "response_factor": response_factor,
+                            "is_concentration_uM": is_conc,
+                            "concentration_reactant_uM": concentration_reactant,
+                            "products_detected": products_found_str,
+                            "product_count": len(products_found),
+                            "status": "Success"
+                        })
+                        
+                        # Also update batch data
+                        col_name = f"reactant-{i}-concentration-{mode}-{is_name}"
+                        self.batch_data.loc[idx, col_name] = concentration_reactant
+                        
+                        self.logger.info(f"Sample {sample_id}: Successfully calculated concentration for {reactant_name} ({concentration_reactant:.2f} µM)")
+    
+        # Create DataFrame and add status summary
         if conversion_results:
             df = pd.DataFrame(conversion_results)
+            
+            # Summarize results by status
+            status_counts = df.groupby('status').size().to_dict()
+            self.logger.info(f"Conversion results by status: {status_counts}")
             self.logger.info(f"Created conversion results DataFrame with {len(df)} rows")
+            
+            # Calculate success rate
+            if 'Success' in status_counts:
+                success_rate = status_counts['Success'] / len(df) * 100
+                self.logger.info(f"Success rate: {success_rate:.1f}%")
+            
             return df
         else:
             self.logger.warning("No conversion results were calculated")
             return pd.DataFrame()
-
-    # Helper function to extract reactant index from column name
-    def _get_reactant_idx(self, column_name):
-        """Extract reactant index from column name like 'reactant-1-max-EIC-signal-Positive'"""
-        match = re.search(r"reactant-(\d+)", column_name)
-        if match:
-            return match.group(1)
-        return None
-
 
 # Configure logging
 logs_dir = "/Users/bvh64415/myrepos/mscheck/logs"
@@ -1870,9 +1976,14 @@ logger = get_logger("MSCheck")  # Use get_logger for consistency with your modul
 logger.info(f"Logging to file: {log_file}")
 
 # Initialize with config
+# analyzer = BulkAnalyser(
+#     "/Users/bvh64415/myrepos/mscheck/tests/testdata/bulk-test/mscheck_config_no_conversion.yaml"
+# )
+
 analyzer = BulkAnalyser(
     "/Users/bvh64415/Library/CloudStorage/OneDrive-DiamondLightSourceLtd/FFF-projects/DENV-NS2B3-NS3(MedChemica)/CAR/flavi-t3c-i2a/QC/flavi-t3c-i2a xp00-xp02 with IS/open_source_with_uv/mscheck/mscheck_config_flavi_lp02.yaml"
 )
+
 
 # # Run specific steps as needed
 # analyzer.load_data()
