@@ -6,6 +6,7 @@ from __future__ import annotations
 # Standard library imports
 import os
 import shutil
+import traceback
 from pathlib import Path
 from typing import Dict, List
 
@@ -14,10 +15,14 @@ import matplotlib.pyplot as plt
 from matplotlib.pyplot import cm
 import numpy as np
 from svgutils.compose import Figure, SVG
+import plotly.graph_objects as go
+import plotly.express as px  # Added from previous recommendations
+from numpyencoder import NumpyEncoder
 
 # Local imports
 from logging_config import get_logger
 from utils import create_molecule_svg
+from report_templates import create_interactive_report_html
 
 # Get logger for this module
 logger = get_logger(__name__)
@@ -51,8 +56,6 @@ class MSReport:
         """
         Initialize report generator
         """
-        from logging_config import get_logger
-
         # Use the main mscheck logger, not a class-specific one
         self.logger = get_logger(
             "mscheck"
@@ -143,8 +146,6 @@ class MSReport:
             error_msg = f"Error creating report for {compound_name}: {str(e)}"
             self.errors.append(error_msg)
             self.logger.error(error_msg)
-            import traceback
-
             self.logger.error(traceback.format_exc())
             return None
 
@@ -388,6 +389,12 @@ class MSReport:
             Path to the generated report file
         """
         try:
+            # Sanitize filenames in available_reports at the beginning
+            if available_reports:
+                for report in available_reports:
+                    if "path" in report:
+                        report["path"] = self.sanitize_filename(report["path"])
+            
             # For HTML output
             if html_output:
                 self.logger.info("Creating interactive HTML report")
@@ -416,8 +423,6 @@ class MSReport:
             error_msg = f"Error creating annotated TIC report: {str(e)}"
             self.errors.append(error_msg)
             self.logger.error(error_msg)
-            import traceback
-
             self.logger.error(traceback.format_exc())
             return None
 
@@ -431,11 +436,6 @@ class MSReport:
         current_report_index: int = 0,
     ) -> str:
         """Create interactive HTML report with complete MZ data for all retention times"""
-        import plotly.graph_objects as go
-        import numpy as np
-        from report_templates import create_interactive_report_html
-        from numpyencoder import NumpyEncoder
-
         # Log the original data size
         self.logger.info(f"Processing {len(RT_values)} data points")
 

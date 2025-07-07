@@ -1853,13 +1853,13 @@ logger = get_logger("MSCheck")  # Use get_logger for consistency with your modul
 logger.info(f"Logging to file: {log_file}")
 
 # Initialize with config
-# analyzer = BulkAnalyser(
-#     "/Users/bvh64415/myrepos/mscheck/tests/testdata/bulk-test/mscheck_config_no_conversion.yaml"
-# )
-
 analyzer = BulkAnalyser(
-    "/Users/bvh64415/Library/CloudStorage/OneDrive-DiamondLightSourceLtd/FFF-projects/DENV-NS2B3-NS3(MedChemica)/CAR/flavi-t3c-i2a/QC/flavi-t3c-i2a xp00-xp02 with IS/open_source_with_uv/mscheck/mscheck_config_flavi_lp01.yaml"
+    "/Users/bvh64415/myrepos/mscheck/tests/testdata/bulk-test/mscheck_config_no_conversion.yaml"
 )
+
+# analyzer = BulkAnalyser(
+#     "/Users/bvh64415/Library/CloudStorage/OneDrive-DiamondLightSourceLtd/FFF-projects/DENV-NS2B3-NS3(MedChemica)/CAR/flavi-t3c-i2a/QC/flavi-t3c-i2a xp00-xp02 with IS/open_source_with_uv/mscheck/mscheck_config_flavi_lp01.yaml"
+# )
 
 
 # # Run specific steps as needed
