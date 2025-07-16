@@ -16,22 +16,44 @@ The AnalyseSpectum class - see [analyse.py](https://github.com/Waztom/mscheck/bl
 
 # <a name="MScheck installation"></a>**MScheck installation**
 
-MScheck relies on rdkit for generating molecule SVG images and for calculating molecular weights<br>
-Installing rdkit using conda works best followed by a pip install of MScheck<br>
+MScheck relies on several packages for full functionality including rdkit for molecular operations, plotly for interactive reports, and other scientific computing libraries.<br>
+Installing using conda works best for managing dependencies followed by pip installs for MScheck-specific packages.<br>
 
-1. Create a conda environment
+1. Create a conda environment with required dependencies
 
-   > `conda create -c conda-forge -n MScheck python=3.11`
+   > `conda create -c conda-forge -n MScheck python=3.11 rdkit plotly matplotlib numpy scipy pandas`
 
 2. Activate the MScheck conda environment created
 
    > `conda activate MScheck`
 
-3. Pip install pyOpenMS
+3. Install pyOpenMS for mass spectrometry file handling
 
    > `pip install --index-url https://pypi.cs.uni-tuebingen.de/simple/ pyopenms`
 
-4. Pip install MScheck
+4. Install additional required packages for enhanced functionality
+
+   > `pip install svgutils numpyencoder`
+
+5. Install MScheck
+
+   > `pip install mscheck`
+
+### Alternative Installation Method
+
+If you prefer to install dependencies individually:
+
+1. Create and activate conda environment:
+   ```bash
+   conda create -c conda-forge -n MScheck python=3.11
+   conda activate MScheck
+   ```
+
+2. Install required packages using conda and pip as needed, for example:
+
+   > `conda install -c conda-forge rdkit plotly`
+
+   > `pip install --index-url https://pypi.cs.uni-tuebingen.de/simple/ pyopenms`
 
    > `pip install mscheck`
 
