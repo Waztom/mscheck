@@ -90,6 +90,8 @@ test.create_report(compound_name="Test")
 
 The .svg report will be in a folder called Reports
 
+For a runnable, end-to-end walkthrough (including bulk analysis with `BulkAnalyser`), see [notebooks/mscheck_tutorial.ipynb](notebooks/mscheck_tutorial.ipynb).
+
 Example of report output:<br>
 
 <p align="center">

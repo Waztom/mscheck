@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import logging
 from scipy.signal import find_peaks
-from uvspectrum import UVSpectrum
+from .uvspectrum import UVSpectrum
 
 class AnalyseUV(UVSpectrum):
     """

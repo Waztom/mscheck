@@ -11,12 +11,12 @@ from rdkit.Chem import Descriptors, AllChem
 import yaml
 
 # Local imports
-from analyseMS import AnalyseMS
-from analyseUV import AnalyseUV
-from report import MSReport
-from heatmap import MSHeatmapGenerator
-from logging_config import setup_logger, get_logger
-from utils import monitor_memory, desalt_smiles, standardise_compound
+from .analyseMS import AnalyseMS
+from .analyseUV import AnalyseUV
+from .report import MSReport
+from .heatmap import MSHeatmapGenerator
+from .logging_config import setup_logger, get_logger
+from .utils import monitor_memory, desalt_smiles, standardise_compound
 
 
 class BulkAnalyser:
@@ -1839,36 +1839,3 @@ class BulkAnalyser:
         else:
             self.logger.warning("No conversion results were calculated")
             return pd.DataFrame()
-
-# Do not remove folowing lines, they are needed for the module to run
-# Configure logging
-logs_dir = "/Users/bvh64415/myrepos/mscheck/logs"
-
-# Create timestamped log filename
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-log_file = os.path.join(logs_dir, f"mscheck_{timestamp}.log")
-
-setup_logger(name="MSCheck", level="INFO", log_file=log_file, use_colors=True)
-logger = get_logger("MSCheck")  # Use get_logger for consistency with your module
-logger.info(f"Logging to file: {log_file}")
-
-# Initialize with config
-analyzer = BulkAnalyser(
-    "/Users/bvh64415/myrepos/mscheck/tests/testdata/bulk-test/mscheck_config_no_conversion.yaml"
-)
-
-# analyzer = BulkAnalyser(
-#     "/Users/bvh64415/Library/CloudStorage/OneDrive-DiamondLightSourceLtd/FFF-projects/DENV-NS2B3-NS3(MedChemica)/CAR/flavi-t3c-i2a/QC/flavi-t3c-i2a xp00-xp02 with IS/open_source_with_uv/mscheck/mscheck_config_flavi_lp01.yaml"
-# )
-
-
-# # Run specific steps as needed
-# analyzer.load_data()
-# analyzer.process_samples(["reactant", "product"], ["Positive"])
-# response_factors = analyzer.calculate_response_factors()
-# conversion_results = analyzer.calculate_conversions(response_factors)
-
-# Or run the complete workflow
-report_paths = analyzer.run_complete_workflow()
-
-logger.info(f"Analysis complete! Generated {len(report_paths)} reports")

@@ -4,9 +4,9 @@ from __future__ import annotations
 from scipy.signal import find_peaks, peak_widths
 import numpy as np
 import logging
-from utils import get_smiles, get_mol, get_MW, get_path_leaf
-from report import MSReport
-from mzspectrum import MassSpectrum
+from .utils import get_smiles, get_mol, get_MW, get_path_leaf
+from .report import MSReport
+from .mzspectrum import MassSpectrum
 
 
 class AnalyseMS(MassSpectrum):

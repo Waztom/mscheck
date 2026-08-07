@@ -20,9 +20,9 @@ import plotly.express as px  # Added from previous recommendations
 from numpyencoder import NumpyEncoder
 
 # Local imports
-from logging_config import get_logger
-from utils import create_molecule_svg
-from report_templates import create_interactive_report_html
+from .logging_config import get_logger
+from .utils import create_molecule_svg
+from .report_templates import create_interactive_report_html
 
 # Get logger for this module
 logger = get_logger(__name__)

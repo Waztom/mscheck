@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.colors import LogNorm
 import traceback
-from logging_config import get_logger
+from .logging_config import get_logger
 
 # Get logger for this module
 logger = get_logger(__name__)
