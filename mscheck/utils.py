@@ -5,7 +5,7 @@ from rdkit.Chem.Draw import rdMolDraw2D
 import ntpath
 import os
 import psutil
-from logging_config import get_logger
+from .logging_config import get_logger
 
 # Get logger for this module
 logger = get_logger(__name__)

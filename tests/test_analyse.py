@@ -1,5 +1,6 @@
 import unittest
 import os
+import numpy as np
 from mscheck import AnalyseMS
 from mscheck import utils
 
@@ -26,10 +27,10 @@ class AnalyseTest(unittest.TestCase):
         self.assertEqual(max_mz, 169)
 
     def test_match_data(self):
-        ions_matched = self.spectrum.Matchdata["ions"]
-        expected_match = [("[H]", 369), ("[Na]", 391)]
+        ions_matched = self.spectrum.analysedata["ions"]
+        expected_match = [("[H]", 369), ("[Na]", 391), ("[NH4+]", 387)]
         self.assertEqual(ions_matched, expected_match)
-        mz_strongest = self.spectrum.Matchdata["mz_strongest"][0][0]
+        mz_strongest = self.spectrum.analysedata["mz_strongest"][0][0]
         expected_mz_strongest = [
             101.1,
             106.9,
@@ -50,10 +51,23 @@ class AnalyseTest(unittest.TestCase):
         self.assertEqual(mass_ions, [1, 23, 39, 18])
         parent_masses = [self.spectrum.compound_MW + mass for mass in mass_ions]
         self.assertEqual(parent_masses, [369, 391, 407, 386])
-        test_matches = [self.spectrum.get_match_indices(mass) for mass in parent_masses]
-        known_indices = [(369, [63, 64, 65, 66]), (391, [118]), (407, []), (386, [])]
-        for test_match, known in zip(test_matches, known_indices):
-            self.assertEqual(test_match, known)
+
+        # analyse() stores matched ion/mass pairs and their retention times in
+        # self.analysedata; recover the peak indices those RT values came from.
+        matched_indices = {}
+        for (_ion, mass), rt_values in zip(
+            self.spectrum.analysedata["ions"], self.spectrum.analysedata["RT"]
+        ):
+            indices = [
+                int(np.where(self.spectrum.MSpeakdata["RT"] == rt)[0][0])
+                for rt in rt_values
+            ]
+            matched_indices[mass] = sorted(indices)
+
+        # [K] (407) and the theoretical [NH4+] mass (386) did not match exactly;
+        # [NH4+] instead matched at 387 within the search tolerance.
+        known_indices = {369: [63, 64, 65, 66], 391: [118], 387: [17, 48, 55]}
+        self.assertEqual(matched_indices, known_indices)
 
 
 if __name__ == "__main__":
