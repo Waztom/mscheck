@@ -1,13 +1,12 @@
 from datetime import datetime
 import os
-import re
 import gc
 import logging
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Optional
 from rdkit import Chem
-from rdkit.Chem import Descriptors, AllChem
+from rdkit.Chem import Descriptors
 import yaml
 
 # Local imports
@@ -15,7 +14,6 @@ from .analyseMS import AnalyseMS
 from .analyseUV import AnalyseUV
 from .report import MSReport
 from .heatmap import MSHeatmapGenerator
-from .logging_config import setup_logger, get_logger
 from .utils import monitor_memory, desalt_smiles, standardise_compound
 
 
@@ -194,86 +192,84 @@ class BulkAnalyser:
                     sample_id = str(row.get("sample-ID", f"sample_{batch_index}"))
                     mzML_filename = row["mzML-filename"]
                     self.logger.info(f"Processing sample {sample_id} ({batch_index + 1}/{total_samples})")
-                    
+
                     # Find mzML file
                     mzML_filepath = self.find_mzml_file(mzML_filename)
                     if mzML_filepath is None:
                         continue
-                        
-                    # Process each analysis type
+
+                    # Precompute per-analysis-type row info (independent of mode) so we can
+                    # reuse a single AnalyseMS instance per (sample, mode) across every
+                    # analysis_type / compound instead of re-parsing the mzML each time.
+                    type_infos = []
                     for analysis_type in analysis_types:
-                        # Get number of compounds of this type
                         no_compounds = self.get_compound_count(row, analysis_type)
                         if no_compounds <= 0:
                             continue
-                        
-                        # Get ion information
                         ions_add_column = f"{analysis_type}-ions-to-add"
                         ions_sub_column = f"{analysis_type}-ions-to-sub"
-                        
-                        analysis_type_ions_to_add = self.parse_ions(row.get(ions_add_column, ""))
-                        analysis_type_ions_to_sub = self.parse_ions(row.get(ions_sub_column, ""))
-                        
                         tolerance_column = f"{analysis_type}-match-tolerance"
-                        analysis_type_match_tolerance = int(row.get(tolerance_column, tolerance))
-                        
-                        # Process compounds - same logic as in analyse_batch
-                        for compound_idx in range(no_compounds):
-                            compound_column = f"{analysis_type}-{compound_idx + 1}"
-                            if compound_column not in row:
-                                continue
-                                
-                            analysis_type_smiles = row[compound_column]
-                            
-                            # Special handling for internal standards
-                            if analysis_type == "internal-std":
-                                std_name = analysis_type_smiles
-                                for is_info in self.config.get("conversion", {}).get("internal_standards", {}).get("standards", []):
-                                    if is_info.get("name") == std_name:
-                                        analysis_type_smiles = is_info.get("smiles")
-                                        break
-                                        
-                            if not isinstance(analysis_type_smiles, str) or not analysis_type_smiles.strip():
-                                continue
-                                
-                            # Desalt SMILES
-                            analysis_type_smiles = desalt_smiles(analysis_type_smiles)
-                            
-                            # Process each mode
-                            for mode in modes:
-                                try:
-                                    total_analyses_attempted += 1
-                                    
-                                    # Process with AnalyseMS - same as in analyse_batch
-                                    analysis_obj = None
+                        type_infos.append({
+                            "type": analysis_type,
+                            "no_compounds": no_compounds,
+                            "ions_to_add": self.parse_ions(row.get(ions_add_column, "")) or ["[H]"],
+                            "ions_to_sub": self.parse_ions(row.get(ions_sub_column, "")),
+                            "match_tolerance": int(row.get(tolerance_column, tolerance)),
+                        })
+
+                    # One AnalyseMS per (sample, mode); reused across every compound.
+                    for mode in modes:
+                        analysis_obj = None
+                        try:
+                            analysis_obj = AnalyseMS(mzMLfilepath=mzML_filepath, mode=mode)
+                            report_subdir = os.path.join(self.report_dir, mode)
+
+                            for info in type_infos:
+                                analysis_type = info["type"]
+                                for compound_idx in range(info["no_compounds"]):
+                                    compound_column = f"{analysis_type}-{compound_idx + 1}"
+                                    if compound_column not in row:
+                                        continue
+
+                                    analysis_type_smiles = row[compound_column]
+
+                                    # Special handling for internal standards
+                                    if analysis_type == "internal-std":
+                                        std_name = analysis_type_smiles
+                                        for is_info in self.config.get("conversion", {}).get("internal_standards", {}).get("standards", []):
+                                            if is_info.get("name") == std_name:
+                                                analysis_type_smiles = is_info.get("smiles")
+                                                break
+
+                                    if not isinstance(analysis_type_smiles, str) or not analysis_type_smiles.strip():
+                                        continue
+
+                                    analysis_type_smiles = desalt_smiles(analysis_type_smiles)
+
                                     try:
-                                        analysis_obj = AnalyseMS(mzMLfilepath=mzML_filepath, mode=mode)
-                                        
-                                        if not analysis_type_ions_to_add:
-                                            analysis_type_ions_to_add = ["[H]"]
-                                            
+                                        total_analyses_attempted += 1
+
                                         analysis_obj.analyse(
                                             compoundsmiles=analysis_type_smiles,
-                                            ionstoadd=analysis_type_ions_to_add,
-                                            ionstosub=analysis_type_ions_to_sub,
-                                            tolerance=analysis_type_match_tolerance
+                                            ionstoadd=info["ions_to_add"],
+                                            ionstosub=info["ions_to_sub"],
+                                            tolerance=info["match_tolerance"],
                                         )
-                                        
+
                                         # Calculate EIC area
                                         eic_area = analysis_obj.calculate_eic_area()
 
-                                        # Get max RT for a ion match
+                                        # Get max RT for an ion match
                                         if "max_rt" in analysis_obj.analysedata and analysis_obj.analysedata["max_rt"] is not None:
                                             rt_column = f"{analysis_type}-{compound_idx + 1}-RT-{mode}"
                                             rt_value = analysis_obj.analysedata["max_rt"]
                                             self.batch_data.loc[batch_index, rt_column] = rt_value
                                             self.logger.debug(f"Stored max RT {rt_value:.2f} min for {analysis_type}-{compound_idx + 1} in {mode} mode")
-                                                                                
+
                                         # Create report
-                                        report_subdir = os.path.join(self.report_dir, mode)
                                         report_name = f"{sample_id}_{analysis_type}_{compound_idx + 1}"
                                         analysis_obj.create_report(folder=report_subdir, compound_name=report_name)
-                                        
+
                                         # Update batch data
                                         signal_column = f"{analysis_type}-{compound_idx + 1}-max-EIC-signal-{mode}"
                                         mz_match_column = f"{analysis_type}-{compound_idx + 1}-max-mz-match-{mode}"
@@ -284,19 +280,15 @@ class BulkAnalyser:
                                         self.batch_data.loc[batch_index, mz_match_column] = str(analysis_obj.analysedata["max_mz_match"])
                                         self.batch_data.loc[batch_index, ions_column] = str(analysis_obj.analysedata["ions"])
                                         self.batch_data.loc[batch_index, eic_area_column] = eic_area
-                                        
+
                                         successful_analyses += 1
-                                        
-                                    finally:
-                                        # Clean up analyzer object
-                                        if analysis_obj is not None:
-                                            del analysis_obj
-                                            import gc
-                                            gc.collect()
-                                            
-                                except Exception as e:
-                                    self.logger.error(f"Error analyzing {analysis_type}-{compound_idx + 1} in {mode}: {str(e)}")
-                
+
+                                    except Exception as e:
+                                        self.logger.error(f"Error analyzing {analysis_type}-{compound_idx + 1} in {mode}: {str(e)}")
+                        finally:
+                            if analysis_obj is not None:
+                                del analysis_obj
+
                     self.processed_samples += 1
 
                     # Process UV data for this sample if MS analysis was successful
@@ -375,17 +367,18 @@ class BulkAnalyser:
                                     
                     except Exception as e:
                         self.logger.error(f"Error analyzing UV data for sample {sample_id}: {str(e)}")
-                    
+
                 except Exception as e:
                     self.logger.error(f"Error processing sample at index {batch_index}: {str(e)}")
-                    
+
+                # Reclaim memory once per sample, after MS + UV analyzers are gone.
+                gc.collect()
+
             # Save intermediate results after each batch
             intermediate_path = os.path.join(self.report_dir, f"intermediate_batch_{batch_idx+1}.csv")
             self.batch_data.to_csv(intermediate_path, index=False)
             self.logger.info(f"Saved intermediate results for batch {batch_idx+1} to {intermediate_path}")
-            
-            # Force garbage collection after each batch
-            import gc
+
             gc.collect()
             monitor_memory(f"After processing batch {batch_idx+1}/{num_batches}", self.logger)
         
