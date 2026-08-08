@@ -41,6 +41,7 @@ setup(
         "PyYAML>=5.4",
         "numpyencoder>=0.3",
         "rainbow-api>=1.0",
+        "psutil>=5.9",
     ],
     packages=find_packages(),
     url="https://github.com/xchem/mscheck",
