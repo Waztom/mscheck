@@ -24,38 +24,24 @@ The `AnalyseMS` class uses Scipy's signal peak finding algorithms (`find_peaks` 
 
 # <a name="MScheck installation"></a>**MScheck installation**
 
-MScheck relies on several packages for full functionality including rdkit for molecular operations, plotly for interactive reports, and other scientific computing libraries.<br>
-Installing using conda works best for managing dependencies followed by pip installs for MScheck-specific packages.<br>
+**Note:** `rdkit` installs cleanly from PyPI (`pip install rdkit`) on Python ≥ 3.10.
+A virtual environment is strongly recommended to avoid dependency conflicts.
 
-1. Create a conda environment with required dependencies
+### Option A — Python venv
 
-   > `conda create -c conda-forge -n MScheck python=3.11 rdkit plotly matplotlib numpy scipy pandas`
+```bash
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install mscheck
+```
 
-2. Activate the MScheck conda environment created
+### Option B — conda environment
 
-   > `conda activate MScheck`
-
-3. Install additional required packages for enhanced functionality
-
-   > `pip install svgutils numpyencoder`
-
-4. Install MScheck (includes `rainbow-api` automatically)
-
-   > `pip install mscheck`
-
-### Alternative Installation Method
-
-1. Create and activate conda environment:
-   ```bash
-   conda create -c conda-forge -n MScheck python=3.11
-   conda activate MScheck
-   ```
-
-2. Install required packages:
-
-   > `conda install -c conda-forge rdkit plotly`
-
-   > `pip install mscheck`
+```bash
+conda create -n mscheck python=3.11
+conda activate mscheck
+pip install mscheck
+```
 
 # <a name="Input files"></a>**Input files**
 
