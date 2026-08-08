@@ -11,16 +11,16 @@ class AnalyseUV(UVSpectrum):
     calculate areas, and determine optimal wavelengths
     """
 
-    def __init__(self, mzMLfilepath: str):
+    def __init__(self, filepath: str):
         """
         Analyse UV spectrum constructor
         
         Args:
-            mzMLfilepath (str): path to .mzML file
+            filepath (str): path to .mzML file or vendor directory (.D, .dx, .raw)
         """
-        super().__init__(mzMLfilepath)
+        super().__init__(filepath)
         self.logger = logging.getLogger("AnalyseUV")
-        self.logger.info(f"Initialized AnalyseUV for {mzMLfilepath}")
+        self.logger.info(f"Initialized AnalyseUV for {filepath}")
         
     def find_peak_at_rt(self, retention_time: float, tolerance: float = 0.5) -> dict:
         """

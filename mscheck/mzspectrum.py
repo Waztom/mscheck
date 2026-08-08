@@ -19,10 +19,10 @@ class MassSpectrum:
                          'RT':      np.ndarray of retention times in minutes}
     """
 
-    def __init__(self, mzMLfilepath: str, mode: str = "Positive") -> None:
-        self._filepath = mzMLfilepath
+    def __init__(self, filepath: str, mode: str = "Positive") -> None:
+        self._filepath = filepath
         self.mode = mode
-        self.MSdata = self._load(mzMLfilepath, mode)
+        self.MSdata = self._load(filepath, mode)
 
     @staticmethod
     def _load(path: str, mode: str) -> dict:

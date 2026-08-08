@@ -28,9 +28,9 @@ class UVSpectrum:
     uv_chromatograms : list[UVChromatogram] — single-wavelength traces (fallback)
     """
 
-    def __init__(self, mzMLfilepath: str) -> None:
-        self._filepath = mzMLfilepath
-        self._data: ExperimentData = _read(mzMLfilepath)
+    def __init__(self, filepath: str) -> None:
+        self._filepath = filepath
+        self._data: ExperimentData = _read(filepath)
 
         self.uv_spectra: Optional[UVSpectraMatrix] = self._data.uv_spectra
         self.uv_chromatograms: list[UVChromatogram] = self._data.uv_chromatograms
@@ -49,7 +49,7 @@ class UVSpectrum:
             logger.info("Loaded %d UV chromatogram(s): %s nm",
                         len(self.uv_chromatograms), wls)
         else:
-            logger.info("No UV data found in %s", mzMLfilepath)
+            logger.info("No UV data found in %s", filepath)
 
     # ── Primary access ────────────────────────────────────────────────────────
 

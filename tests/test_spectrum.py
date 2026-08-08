@@ -7,8 +7,8 @@ class SpectrumTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         mzMLFile = os.path.join(os.getcwd(), "tests", "testdata", "1AB-1001.mzML")
-        cls.spectrum_positive = MassSpectrum(mzMLfilepath=mzMLFile, mode="Positive")
-        cls.spectrum_negative = MassSpectrum(mzMLfilepath=mzMLFile, mode="Negative")
+        cls.spectrum_positive = MassSpectrum(filepath=mzMLFile, mode="Positive")
+        cls.spectrum_negative = MassSpectrum(filepath=mzMLFile, mode="Negative")
 
     def test_create_positive_spectrum(self):
         self.assertIsNotNone(self.spectrum_positive)
