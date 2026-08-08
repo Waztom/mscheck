@@ -33,12 +33,8 @@ setup(
         "matplotlib",
         "scipy",
         "svgutils",
+        "rainbow-api>=1.0",
     ],
-    extras_require={
-        # Enables reading Agilent .D/.dx and Waters .raw vendor directories.
-        # Required for ELSD support (mzML does not carry ELSD channels).
-        "vendor": ["rainbow-api>=1.0"],
-    },
     packages=find_packages(),
     url="https://github.com/xchem/mscheck",
     classifiers=[

@@ -16,6 +16,7 @@ from typing import Optional
 
 from .spectra_types import ExperimentData
 from . import mzml_parser
+from . import rainbow_parser
 
 _RAINBOW_EXTENSIONS = {".d", ".dx", ".raw"}
 
@@ -42,7 +43,6 @@ def read(path: str, requested_polarity: Optional[str] = None) -> ExperimentData:
         FileNotFoundError: if the path does not exist.
     """
     if _looks_like_vendor_directory(path):
-        from . import rainbow_parser  # lazy — optional dependency
         return rainbow_parser.parse(path, requested_polarity=requested_polarity)
 
     if not os.path.isfile(path):

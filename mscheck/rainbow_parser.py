@@ -6,9 +6,7 @@ Uses the ``rainbow-api`` package to read binary vendor files directly, providing
   • 2D DAD spectral matrix (as with mzML, but read from the native binary)
   • MS1 spectra
 
-Rainbow is an optional dependency. If it is not installed, importing this module
-raises ImportError with a helpful message. Callers should catch this and fall back
-to the mzML backend.
+Rainbow is a required dependency: ``pip install rainbow-api`` or ``pip install mscheck``.
 
 Polarity limitation
 -------------------
@@ -25,6 +23,7 @@ import os
 from typing import Optional
 
 import numpy as np
+import rainbow as _rb  # type: ignore
 
 from .spectra_types import (
     ELSDChromatogram,
@@ -33,15 +32,6 @@ from .spectra_types import (
     UVChromatogram,
     UVSpectraMatrix,
 )
-
-try:
-    import rainbow as _rb  # type: ignore
-except ImportError as exc:  # pragma: no cover
-    raise ImportError(
-        "rainbow_parser requires the 'rainbow-api' package. "
-        "Install with: pip install rainbow-api"
-    ) from exc
-
 
 _VENDOR_EXTENSIONS = {
     ".d": "agilent",
