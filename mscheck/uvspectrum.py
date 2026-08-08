@@ -1,4 +1,4 @@
-"""UV chromatogram and 2D DAD spectrum from .mzML files."""
+"""UV chromatogram and 2D DAD spectrum from mzML files or vendor directories."""
 
 from __future__ import annotations
 
@@ -7,18 +7,19 @@ from typing import Optional
 
 import numpy as np
 
-from .mzml_parser import MzMLData, UVSpectraMatrix, UVChromatogram, parse as _parse_mzml
+from .spectra_types import ExperimentData, UVChromatogram, UVSpectraMatrix
+from .reader import read as _read
 
 logger = logging.getLogger(__name__)
 
 
 class UVSpectrum:
     """
-    UV data from one mzML file.
+    UV data from one mzML file or one Agilent/Waters vendor directory.
 
     Prioritises the 2D DAD spectral matrix (electromagnetic radiation spectra,
     typically 190–400 nm at every scan) when present.  Falls back to any
-    single-wavelength chromatograms stored in <chromatogramList>.
+    single-wavelength chromatograms.
 
     Public attributes
     -----------------
@@ -27,9 +28,9 @@ class UVSpectrum:
     uv_chromatograms : list[UVChromatogram] — single-wavelength traces (fallback)
     """
 
-    def __init__(self, mzMLfilepath: str) -> None:
-        self._filepath = mzMLfilepath
-        self._data: MzMLData = _parse_mzml(mzMLfilepath)
+    def __init__(self, filepath: str) -> None:
+        self._filepath = filepath
+        self._data: ExperimentData = _read(filepath)
 
         self.uv_spectra: Optional[UVSpectraMatrix] = self._data.uv_spectra
         self.uv_chromatograms: list[UVChromatogram] = self._data.uv_chromatograms
@@ -48,7 +49,7 @@ class UVSpectrum:
             logger.info("Loaded %d UV chromatogram(s): %s nm",
                         len(self.uv_chromatograms), wls)
         else:
-            logger.info("No UV data found in %s", mzMLfilepath)
+            logger.info("No UV data found in %s", filepath)
 
     # ── Primary access ────────────────────────────────────────────────────────
 

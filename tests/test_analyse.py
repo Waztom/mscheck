@@ -9,7 +9,7 @@ class AnalyseTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         mzMLFile = os.path.join(os.getcwd(), "tests", "testdata", "1AB-1001.mzML")
-        cls.spectrum = AnalyseMS(mzMLfilepath=mzMLFile, mode="Positive")
+        cls.spectrum = AnalyseMS(filepath=mzMLFile, mode="Positive")
         cls.spectrum.analyse(
             compoundsmiles="O=C(c1ccco1)N1CCN(C(=O)N2CCN(c3ccccc3)CC2)CC1",
             ionstoadd=["[H]", "[Na]", "[K]", "[NH4+]"],

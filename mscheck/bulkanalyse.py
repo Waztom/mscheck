@@ -194,7 +194,7 @@ class BulkAnalyser:
                     self.logger.info(f"Processing sample {sample_id} ({batch_index + 1}/{total_samples})")
 
                     # Find mzML file
-                    mzML_filepath = self.find_mzml_file(mzML_filename)
+                    mzML_filepath = self.find_data_file(mzML_filename)
                     if mzML_filepath is None:
                         continue
 
@@ -221,7 +221,7 @@ class BulkAnalyser:
                     for mode in modes:
                         analysis_obj = None
                         try:
-                            analysis_obj = AnalyseMS(mzMLfilepath=mzML_filepath, mode=mode)
+                            analysis_obj = AnalyseMS(filepath=mzML_filepath, mode=mode)
                             report_subdir = os.path.join(self.report_dir, mode)
 
                             for info in type_infos:
@@ -391,47 +391,40 @@ class BulkAnalyser:
         
         return self.batch_data
 
-    def find_mzml_file(
+    def find_data_file(
         self, filename: str, custom_data_dir: str = None
     ) -> Optional[str]:
-        """
-        Helper method to locate mzML files with flexible path handling
-
-        Args:
-            filename: Base filename with or without extension
-            custom_data_dir: Optional custom directory to search in (defaults to self.data_dir)
-
-        Returns:
-            Full path to mzML file if found, None otherwise
-        """
-        # Use custom directory if provided, otherwise use default
+        """Locate an mzML file or vendor directory (.D, .dx, .raw) by name."""
         data_dir = custom_data_dir if custom_data_dir is not None else self.data_dir
+        name, ext = os.path.splitext(filename)
+        ext_lower = ext.lower()
 
-        # Try different possible file paths
-        possible_paths = [
-            os.path.join(data_dir, f"{filename}.mzML"),
-            os.path.join(data_dir, filename),
-        ]
-
-        self.logger.info(f"Searching for mzML file: {filename}")
-        self.logger.info(f"Looking in directory: {data_dir}")
-        self.logger.info(f"Possible paths: {possible_paths}")
-
-        # Try with extension if not already present
-        if not filename.endswith(".mzML"):
-            possible_paths.append(os.path.join(data_dir, f"{filename}.mzML"))
+        # Exact name first, then probe all recognised formats
+        possible_paths = [os.path.join(data_dir, filename)]
+        if ext_lower not in {".mzml", ".d", ".dx", ".raw"}:
+            possible_paths += [
+                os.path.join(data_dir, f"{filename}.mzML"),
+                os.path.join(data_dir, f"{filename}.D"),
+                os.path.join(data_dir, f"{filename}.dx"),
+                os.path.join(data_dir, f"{filename}.raw"),
+            ]
+        elif ext_lower == ".mzml":
+            possible_paths += [
+                os.path.join(data_dir, f"{name}.D"),
+                os.path.join(data_dir, f"{name}.dx"),
+                os.path.join(data_dir, f"{name}.raw"),
+            ]
         else:
-            # If filename already has extension, try without it
-            base_name = filename[:-5]
-            possible_paths.append(os.path.join(data_dir, base_name))
+            possible_paths.append(os.path.join(data_dir, f"{name}.mzML"))
 
-        # Check if any path exists
+        self.logger.info(f"Searching for data file: {filename} in {data_dir}")
+
         for path in possible_paths:
             if os.path.exists(path):
-                self.logger.info(f"Found mzML file at: {path}")
+                self.logger.info(f"Found data file at: {path}")
                 return path
 
-        self.logger.warning(f"Could not find mzML file for {filename}")
+        self.logger.warning(f"Could not find data file for {filename}")
         return None
 
     def parse_ions(self, ion_str: str) -> List[str]:
@@ -610,11 +603,11 @@ class BulkAnalyser:
         try:
             # Find mzML file
             mzML_filename = row["mzML-filename"]
-            mzML_filepath = self.find_mzml_file(mzML_filename)
+            mzML_filepath = self.find_data_file(mzML_filename)
             if mzML_filepath is not None:
                 # Create analyzer to get RT/TIC
                 mode = "Positive"
-                temp_analyzer = AnalyseMS(mzMLfilepath=mzML_filepath, mode=mode)
+                temp_analyzer = AnalyseMS(filepath=mzML_filepath, mode=mode)
                 
                 # Create copies instead of references to ensure data persists after analyzer is deleted
                 if "RT" in temp_analyzer.MSdata:
@@ -765,10 +758,10 @@ class BulkAnalyser:
         try:
             # Get mzML file
             mzML_filename = row["mzML-filename"]
-            mzML_filepath = self.find_mzml_file(mzML_filename)
+            mzML_filepath = self.find_data_file(mzML_filename)
 
             # Create analyzer and run analysis
-            temp_analyzer = AnalyseMS(mzMLfilepath=mzML_filepath, mode=mode)
+            temp_analyzer = AnalyseMS(filepath=mzML_filepath, mode=mode)
 
             # Get parameters for analysis
             ionstoadd = self.parse_ions(row.get(f"{compound_type}-ions-to-add", ""))
@@ -1317,10 +1310,10 @@ class BulkAnalyser:
 
             # Find mzML file
             mzML_filename = row.get("mzML-filename")
-            mzML_filepath = self.find_mzml_file(mzML_filename, ref_data_dir)
+            mzML_filepath = self.find_data_file(mzML_filename, ref_data_dir)
             if not mzML_filepath:
                 self.logger.warning(
-                    f"Could not find mzML file for reference sample {sample_id} and filename {mzML_filename}"
+                    f"Could not find data file for reference sample {sample_id} and filename {mzML_filename}"
                 )
                 continue
 
@@ -1477,7 +1470,7 @@ class BulkAnalyser:
                 self.logger.info(f"Expected m/z (M-H)-: {mw - 1.007825:.4f}")
 
             # Create analyzer for this mode
-            analyzer = AnalyseMS(mzMLfilepath=mzML_filepath, mode=mode)
+            analyzer = AnalyseMS(filepath=mzML_filepath, mode=mode)
 
             # Default ions based on mode - keep existing code
             ions_to_add = ["[H]"]
@@ -1530,7 +1523,7 @@ class BulkAnalyser:
             
             # Get mzML file path - first potential failure point
             mzML_filename = sample_data.get("mzML-filename")
-            mzML_filepath = self.find_mzml_file(mzML_filename)
+            mzML_filepath = self.find_data_file(mzML_filename)
             
             if not mzML_filepath:
                 # Add entry for missing mzML file
@@ -1547,9 +1540,9 @@ class BulkAnalyser:
                     "concentration_reactant_uM": float('nan'),
                     "products_detected": "N/A",
                     "product_count": 0,
-                    "status": "Missing mzML file"
+                    "status": "Missing data file"
                 })
-                self.logger.warning(f"Sample {sample_id}: mzML file not found")
+                self.logger.warning(f"Sample {sample_id}: data file not found")
                 continue
                 
             # Find internal standards in this sample - second potential failure point

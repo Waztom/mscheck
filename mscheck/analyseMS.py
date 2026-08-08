@@ -14,14 +14,14 @@ class AnalyseMS(MassSpectrum):
     Analyses the MassSpectrum class object
     """
 
-    def __init__(self, mzMLfilepath: str, mode: str = "Positive"):
+    def __init__(self, filepath: str, mode: str = "Positive"):
         """
         Analyse spectrum constructor
-        mzMLfilepath (str): path to .mxML file
+        filepath (str): path to .mzML file or vendor directory (.D, .dx, .raw)
         mode (str): specify polarity ("Positive" or "Negative") of mass spctra mode to search ions for. Default set
                     to Positive.
         """
-        super().__init__(mzMLfilepath, mode)
+        super().__init__(filepath, mode)
         self.MSpeakdata = self._get_ms_peak_data()
         self.logger = logging.getLogger("AnalyseMS")
 
