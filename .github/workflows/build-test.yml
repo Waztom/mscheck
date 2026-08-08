@@ -6,29 +6,15 @@ on:
       - "master"
       - "staging"
 
-env:
-  CONDA_ORIGIN: http://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh
-
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash -l {0}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Setup python
-        uses: actions/setup-python@v2
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
-      - uses: conda-incubator/setup-miniconda@v2
-        with:
-          auto-update-conda: true
-          python-version: ${{ matrix.python-version }}
-      - name: Conda create MSCheck
-        run: |
-          conda create -c conda-forge -n MScheck python=3.11
-          conda activate MScheck
-          python setup.py install
-          python -m unittest discover
+          python-version: "3.11"
+      - name: Install MSCheck and dependencies
+        run: pip install .
+      - name: Run tests
+        run: python -m unittest discover
