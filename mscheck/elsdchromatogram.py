@@ -2,7 +2,7 @@
 
 ELSD (Evaporative Light Scattering Detector) is a single-channel detector.
 Its data can only be read from vendor binary files (Agilent .D, Waters .raw)
-via the Rainbow parser — msConvert does not export ELSD channels into mzML.
+via the Rainbow parser
 """
 
 from __future__ import annotations
