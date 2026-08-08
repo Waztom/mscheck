@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "master"
+      - "staging"
 
 env:
   CONDA_ORIGIN: http://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh
