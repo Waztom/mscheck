@@ -17,12 +17,21 @@ import base64
 import re
 import zlib
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
 
-# mzML namespace — may be absent in some files, handled via _tag()
+from .spectra_types import (
+    ExperimentData,
+    MS1Spectrum,
+    UVChromatogram,
+    UVSpectraMatrix,
+)
+
+# Backward-compatible alias
+MzMLData = ExperimentData
+
+# mzML namespace — may be absent in some files, handled via _find() / _iter()
 _NS = "http://psi.hupo.org/ms/mzml"
 
 # CV accessions referenced in parsing
@@ -38,62 +47,6 @@ _CV_FLOAT64      = "MS:1000523"  # 64-bit float
 _CV_FLOAT32      = "MS:1000521"  # 32-bit float
 _CV_ZLIB         = "MS:1000574"  # zlib compression
 _CV_NO_COMPRESS  = "MS:1000576"  # no compression
-
-
-# ── Data classes ──────────────────────────────────────────────────────────────
-
-@dataclass
-class MS1Spectrum:
-    rt: float            # retention time in minutes
-    polarity: str        # 'positive' or 'negative'
-    mz: np.ndarray
-    intensity: np.ndarray
-
-
-@dataclass
-class UVChromatogram:
-    """Single-wavelength UV/DAD trace from <chromatogramList>."""
-    native_id: str
-    wavelength: Optional[float]  # nm extracted from native_id; None if not parseable
-    times: np.ndarray            # minutes
-    intensities: np.ndarray      # mAU (or detector counts)
-
-
-@dataclass
-class UVSpectraMatrix:
-    """
-    Full 2D DAD dataset: one UV spectrum (190–400 nm) per scan.
-
-    Shape:
-        times       : (n_scans,)                  minutes
-        wavelengths : (n_wavelengths,)             nm
-        data        : (n_scans, n_wavelengths)     mAU or detector counts
-    """
-    times: np.ndarray
-    wavelengths: np.ndarray
-    data: np.ndarray
-
-    def at_wavelength(self, nm: float) -> tuple[np.ndarray, np.ndarray]:
-        """Return (times, intensities) for the wavelength closest to *nm*."""
-        idx = int(np.argmin(np.abs(self.wavelengths - nm)))
-        return self.times, self.data[:, idx]
-
-    def best_wavelength(self) -> tuple[float, np.ndarray, np.ndarray]:
-        """
-        Return (wavelength_nm, times, intensities) for the wavelength that
-        produces the largest integrated peak area over the run.
-        """
-        areas = np.trapz(np.maximum(self.data, 0), self.times, axis=0)
-        idx = int(np.argmax(areas))
-        return float(self.wavelengths[idx]), self.times, self.data[:, idx]
-
-
-@dataclass
-class MzMLData:
-    """Parsed contents of one mzML file."""
-    ms1_spectra: list[MS1Spectrum] = field(default_factory=list)
-    uv_spectra: Optional[UVSpectraMatrix] = None     # 2D DAD, may be absent
-    uv_chromatograms: list[UVChromatogram] = field(default_factory=list)
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
@@ -289,7 +242,7 @@ def _parse_chromatogram(elem: ET.Element) -> Optional[UVChromatogram]:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def parse(filepath: str) -> MzMLData:
+def parse(filepath: str) -> ExperimentData:
     """
     Parse an mzML file and return all three data channels.
 
@@ -297,9 +250,10 @@ def parse(filepath: str) -> MzMLData:
         filepath: Path to the .mzML file.
 
     Returns:
-        MzMLData with ms1_spectra, uv_spectra, and uv_chromatograms populated.
+        ExperimentData with ms1_spectra, uv_spectra, and uv_chromatograms populated.
+        elsd_chromatogram is always None (mzML files never contain ELSD data).
     """
-    result = MzMLData()
+    result = ExperimentData(source_path=filepath, source_kind="mzml")
     uv_rows: list[tuple] = []  # (rt, wavelengths, intensities)
 
     # Use iterparse so large files do not require holding the full DOM

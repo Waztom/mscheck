@@ -1,15 +1,15 @@
-"""Mass spectrum from .mzML files."""
+"""Mass spectrum from mzML files or vendor directories."""
 
 from __future__ import annotations
 
 import numpy as np
 
-from .mzml_parser import parse as _parse_mzml
+from .reader import read as _read
 
 
 class MassSpectrum:
     """
-    Loads MS1 spectra from an mzML file, filtered by polarity.
+    Loads MS1 spectra from an mzML file or vendor directory, filtered by polarity.
 
     Public attributes
     -----------------
@@ -25,11 +25,16 @@ class MassSpectrum:
         self.MSdata = self._load(mzMLfilepath, mode)
 
     @staticmethod
-    def _load(mzMLfilepath: str, mode: str) -> dict:
-        data = _parse_mzml(mzMLfilepath)
-
+    def _load(path: str, mode: str) -> dict:
         target = "positive" if mode == "Positive" else "negative"
-        spectra = [s for s in data.ms1_spectra if s.polarity == target]
+        data = _read(path, requested_polarity=target)
+
+        # 'unknown' polarity comes from Rainbow-loaded vendor data — accept it
+        # under either mode. mzML data always has an explicit polarity.
+        spectra = [
+            s for s in data.ms1_spectra
+            if s.polarity == target or s.polarity == "unknown"
+        ]
 
         mz_data = [(s.mz, s.intensity) for s in spectra]
         tic = np.array([round(float(s.intensity.sum())) for s in spectra])
